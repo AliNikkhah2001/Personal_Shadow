@@ -1,0 +1,10 @@
+[
+    {"quote": "We can only see a short distance ahead, but we can see plenty there that needs to be done.", "author": "Alan Turing"},
+    {"quote": "Sometimes it is the people no one can imagine anything of who do the things no one can imagine.", "author": "Alan Turing"},
+    {"quote": "A distributed system is one in which the failure of a computer you didn't even know existed can render your own computer unusable.", "author": "Leslie Lamport"},
+    {"quote": "Simplicity is prerequisite for reliability.", "author": "Edsger W. Dijkstra"},
+    {"quote": "First, solve the problem. Then, write the code.", "author": "John Johnson"},
+    {"quote": "Talk is cheap. Show me the code.", "author": "Linus Torvalds"},
+    {"quote": "Premature optimization is the root of all evil.", "author": "Donald Knuth"},
+    {"quote": "Complexity is the enemy of reliability.", "author": "Niklaus Wirth"}
+]
