@@ -1223,22 +1223,58 @@ class SystemBridge(QObject):
         elif action == "manage_goal":
             sub = req.get("sub")
             if sub == "add":
+                parent_id = req.get("parent_id")
+                title = req.get("title", "New Goal")
+                target_hours = float(req.get("target_hours") or 0)
+                deadline = req.get("deadline")
+                category = req.get("category", "Goal")
+                
+                print(f"📝 Adding goal: {title}, target: {target_hours}h, deadline: {deadline}")
+                
+                # Validate deadline
+                if deadline:
+                    try:
+                        # Ensure deadline format is correct
+                        if 'T' in deadline:
+                            deadline = deadline.replace('T', ' ')
+                        datetime.strptime(deadline, "%Y-%m-%d %H:%M")
+                    except ValueError as e:
+                        print(f"⚠️ Invalid deadline format: {deadline}")
+                        # Use a default deadline (7 days from now)
+                        deadline = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d %H:%M")
+                
                 db.c.execute("""
-                    INSERT INTO cascading_goals (uuid, modified_at, parent_id, title, target_hours, deadline)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    INSERT INTO cascading_goals (uuid, modified_at, parent_id, title, category, target_hours, deadline)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                 """, (
                     uuid.uuid4().hex,
                     datetime.now().isoformat(),
-                    req.get("parent_id"),
-                    req.get("title"),
-                    float(req.get("target_hours") or 0),
-                    req.get("deadline")
+                    parent_id,
+                    title,
+                    category,
+                    target_hours,
+                    deadline
                 ))
+                print(f"✅ Goal added successfully")
+                
             elif sub == "delete":
-                db.c.execute("DELETE FROM cascading_goals WHERE id=?", (req.get("id"),))
+                goal_id = req.get("id")
+                print(f"🗑️ Deleting goal: {goal_id}")
+                db.c.execute("DELETE FROM cascading_goals WHERE id=?", (goal_id,))
+                print(f"✅ Goal deleted successfully")
+                
             db.conn.commit()
-            return json.dumps({"goals": self.get_goals_tree(), "flat_goals": self.get_flat_goals()})
-
+            
+            goals_tree = self.get_goals_tree()
+            flat_goals = self.get_flat_goals()
+            
+            print(f"📊 Goals tree: {len(goals_tree)} goals")
+            print(f"📊 Flat goals: {len(flat_goals)} goals")
+            
+            return json.dumps({
+                "goals": goals_tree,
+                "flat_goals": flat_goals
+            })
         elif action == "export_data":
             parent = QApplication.activeWindow()
             file_path, _ = QFileDialog.getSaveFileName(
@@ -2093,7 +2129,7 @@ def get_html_content():
             );
         };
 
-        const DualCalendar = ({ backend }) => {
+        const DualCalendar = ({ backend, refreshGoals, goals }) => {
             const [currentDate, setCurrentDate] = useState(new Date());
             const [showModal, setShowModal] = useState(false);
             const [selectedDate, setSelectedDate] = useState(null);
@@ -2117,32 +2153,100 @@ def get_html_content():
                 setShowModal(true);
             };
             
-            const handleSaveGoal = () => {
-                backend.request(JSON.stringify({action: 'manage_goal', sub: 'add', title: gTitle || "New Objective", target_hours: gTgt || 0, category: gCat, deadline: selectedDate})).then(() => {
-                    setShowModal(false); setGTitle(""); setGTgt("");
-                });
+        const handleSaveGoal = () => {
+            if (!gTitle.trim()) {
+                alert('Please enter a goal title');
+                return;
+            }
+            
+            const goalData = {
+                action: 'manage_goal',
+                sub: 'add',
+                title: gTitle || "New Objective",
+                target_hours: gTgt || 0,
+                category: gCat || "Goal",
+                deadline: selectedDate || new Date().toISOString().slice(0, 16).replace('T', ' '),
+                parent_id: null
             };
-
-            const renderDays = () => {
-                let days = [];
-                for (let i = 0; i < firstDayOfMonth; i++) days.push(<div key={`empty-${i}`} className="min-h-[70px]"></div>);
-                for (let i = 1; i <= daysInMonth; i++) {
-                    const dateObj = new Date(year, month, i);
-                    const isToday = new Date().toDateString() === dateObj.toDateString();
-                    const [jy, jm, jd] = g2j(year, month + 1, i);
-                    
-                    days.push(
-                        <div key={i} onClick={() => handleDayClick(i)} className={`relative p-1.5 flex flex-col min-h-[70px] border border-white/5 rounded-lg 
-                            ${isToday ? 'bg-blue-600/30 border-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.5)]' : 'bg-black/20 hover:bg-white/10'} transition-all overflow-hidden cursor-pointer`}>
-                            <div className="flex justify-between items-start w-full">
-                                <span className={`text-sm font-bold ${isToday ? 'text-white' : 'text-gray-200'}`}>{i}</span>
-                                <span className="text-[10px] font-bold text-yellow-500 font-[Tahoma]">{toFarsi(jd)}</span>
-                            </div>
-                        </div>
-                    );
+            
+            console.log('Saving goal:', goalData);
+            
+            backend.request(JSON.stringify(goalData)).then(res => {
+                const data = JSON.parse(res);
+                console.log('Goal saved:', data);
+                if (data.goals && typeof refreshGoals === 'function') {
+                    refreshGoals(data);
                 }
-                return days;
-            };
+                setShowModal(false);
+                setGTitle("");
+                setGTgt("");
+                alert('✅ Goal saved successfully!');
+            }).catch(err => {
+                console.error('Failed to save goal:', err);
+                alert('❌ Failed to save goal. Check console for details.');
+            });
+        };
+
+        const renderDays = () => {
+            let days = [];
+            for (let i = 0; i < firstDayOfMonth; i++) days.push(<div key={`empty-${i}`} className="min-h-[70px]"></div>);
+            for (let i = 1; i <= daysInMonth; i++) {
+                const dateObj = new Date(year, month, i);
+                const isToday = new Date().toDateString() === dateObj.toDateString();
+                const [jy, jm, jd] = g2j(year, month + 1, i);
+                
+                // Check if this day has a goal
+                const hasGoal = goals && goals.some(g => {
+                    if (!g.deadline) return false;
+                    const goalDate = new Date(g.deadline);
+                    const currentDate = new Date(year, month, i);
+                    return goalDate.toDateString() === currentDate.toDateString();
+                });
+                
+                // Get goals for this day (for tooltip or display)
+                const dayGoals = goals && goals.filter(g => {
+                    if (!g.deadline) return false;
+                    const goalDate = new Date(g.deadline);
+                    const currentDate = new Date(year, month, i);
+                    return goalDate.toDateString() === currentDate.toDateString();
+                });
+                
+                days.push(
+                    <div key={i} onClick={() => handleDayClick(i)} className={`relative p-1.5 flex flex-col min-h-[70px] border border-white/5 rounded-lg 
+                        ${isToday ? 'bg-blue-600/30 border-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.5)]' : 'bg-black/20 hover:bg-white/10'} transition-all overflow-hidden cursor-pointer group`}>
+                        <div className="flex justify-between items-start w-full">
+                            <span className={`text-sm font-bold ${isToday ? 'text-white' : 'text-gray-200'}`}>{i}</span>
+                            <span className="text-[10px] font-bold text-yellow-500 font-[Tahoma]">{toFarsi(jd)}</span>
+                        </div>
+                        
+                        {/* Goal indicator */}
+                        {hasGoal && (
+                            <div className="absolute bottom-1 right-1 flex items-center gap-1">
+                                <span className="text-[8px] text-green-400">
+                                    <i className="fas fa-flag"></i>
+                                </span>
+                                {dayGoals && dayGoals.length > 0 && (
+                                    <span className="text-[6px] text-green-400/60">{dayGoals.length}</span>
+                                )}
+                            </div>
+                        )}
+                        
+                        {/* Tooltip on hover */}
+                        {hasGoal && dayGoals && dayGoals.length > 0 && (
+                            <div className="absolute bottom-full right-0 mb-1 hidden group-hover:block bg-black/90 text-white text-[8px] p-1 rounded whitespace-nowrap z-10">
+                                {dayGoals.map((g, idx) => (
+                                    <div key={idx} className="flex items-center gap-1">
+                                        <i className="fas fa-flag text-green-400 text-[6px]"></i>
+                                        <span>{g.title}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                );
+            }
+            return days;
+        };
 
             return (
                 <div className="p-4 h-full flex flex-col w-full relative">
@@ -2240,24 +2344,60 @@ def get_html_content():
             );
         };
 
-        const DashboardArchitectureWidget = ({ goals }) => {
-            const sortedGoals = goals ? [...goals].filter(g => g.deadline).sort((a,b) => new Date(a.deadline) - new Date(b.deadline)) : [];
-            return (
-                <div className="p-4 h-full flex flex-col w-full overflow-y-auto">
-                    <h3 className="text-gray-300 font-bold uppercase tracking-widest text-sm border-b border-white/10 pb-2 mb-4">Upcoming Deadlines</h3>
-                    <div className="flex flex-col gap-2">
-                        {sortedGoals.slice(0, 5).map(g => (
-                            <div key={g.id} className="flex justify-between items-center p-2 bg-white/5 rounded border border-white/5">
-                                <span className="text-xs font-bold text-gray-200">{g.title}</span>
-                                <span className="text-[10px] font-mono text-yellow-400">{g.deadline.split(' ')[0]}</span>
-                            </div>
-                        ))}
-                    </div>
+const DashboardArchitectureWidget = ({ goals }) => {
+    const sortedGoals = goals ? [...goals]
+        .filter(g => g.deadline)
+        .sort((a,b) => new Date(a.deadline) - new Date(b.deadline)) : [];
+    
+    const now = new Date();
+    const upcomingGoals = sortedGoals.filter(g => new Date(g.deadline) >= now);
+    const overdueGoals = sortedGoals.filter(g => new Date(g.deadline) < now);
+    
+    return (
+        <div className="p-4 h-full flex flex-col w-full overflow-y-auto">
+            <h3 className="text-gray-300 font-bold uppercase tracking-widest text-sm border-b border-white/10 pb-2 mb-4">
+                Upcoming Deadlines 
+                <span className="text-[10px] text-gray-500 ml-2">({upcomingGoals.length})</span>
+            </h3>
+            
+            {sortedGoals.length === 0 ? (
+                <div className="text-center text-gray-500 py-8">
+                    <i className="fas fa-calendar-plus text-3xl mb-2 opacity-50"></i>
+                    <p className="text-xs">No goals set</p>
+                    <p className="text-[10px] mt-1">Click a date on the calendar to add a goal</p>
                 </div>
-            );
-        };
+            ) : (
+                <>
+                    {upcomingGoals.slice(0, 5).map(g => {
+                        const daysUntil = Math.ceil((new Date(g.deadline) - now) / (1000 * 60 * 60 * 24));
+                        return (
+                            <div key={g.id} className="flex justify-between items-center p-2 bg-white/5 rounded border border-white/5 hover:bg-white/10 transition">
+                                <span className="text-xs font-bold text-gray-200">{g.title}</span>
+                                <div className="flex items-center gap-2">
+                                    <span className={`text-[10px] font-mono ${daysUntil <= 1 ? 'text-red-400' : 'text-yellow-400'}`}>
+                                        {daysUntil <= 0 ? '🔴 Today!' : `${daysUntil}d`}
+                                    </span>
+                                    <span className="text-[10px] text-gray-500">{g.deadline.split(' ')[0]}</span>
+                                </div>
+                            </div>
+                        );
+                    })}
+                    
+                    {overdueGoals.length > 0 && (
+                        <div className="mt-2 p-2 bg-red-900/20 border border-red-500/30 rounded">
+                            <p className="text-[10px] text-red-400">
+                                <i className="fas fa-exclamation-triangle mr-1"></i>
+                                {overdueGoals.length} overdue {overdueGoals.length === 1 ? 'goal' : 'goals'}
+                            </p>
+                        </div>
+                    )}
+                </>
+            )}
+        </div>
+    );
+};
 
-        const DashboardView = ({ layout, setLayout, goals, isEditingLayout, setIsEditingLayout, clockFeed, heatmap, habits, habitLogs, metrics, backend }) => {
+        const DashboardView = ({ layout, setLayout, goals, isEditingLayout, setIsEditingLayout, clockFeed, heatmap, habits, habitLogs, metrics, backend, refreshGoals }) => {
             const toggleWidgetVisibility = (id) => setLayout(prev => prev.map(w => w.id === id ? { ...w, visible: !w.visible } : w));
             const toggleWidgetSize = (id) => setLayout(prev => prev.map(w => w.id === id ? { ...w, size: w.size === 'full' ? 'half' : 'full' } : w));
             
@@ -2268,7 +2408,7 @@ def get_html_content():
                             {clockFeed ? <img src={clockFeed} className="w-56 h-56 drop-shadow-2xl object-contain" /> : <div className="text-gray-500">Loading Native Horology...</div>}
                         </div>
                     );
-                    case 'Calendar': return <DualCalendar backend={backend} />;
+                    case 'Calendar': return <DualCalendar backend={backend} refreshGoals={refreshGoals} goals={goals} />;
                     case 'GlobalTargets': return <GlobalTargets metrics={metrics} />;
                     case 'GitHubMatrix': return <NativeGitHubMatrix heatmap={heatmap} />;
                     case 'HabitsWidget': return <DashboardHabitWidget habits={habits} habitLogs={habitLogs} />;
@@ -3662,10 +3802,11 @@ const startFocusSession = () => {
             const [flatGoals, setFlatGoals] = useState([]);
             const [heatmap, setHeatmap] = useState([]);
             const [settings, setSettings] = useState({
-                // ... existing settings
                 git_status: 'unknown',
                 git_last_sync: null,
                 process_list: [],
+                mapped_folders: [],
+                has_token: false,
             });
             const [metrics, setMetrics] = useState(null);
             const [habits, setHabits] = useState([]);
@@ -3681,6 +3822,24 @@ const startFocusSession = () => {
             const [timerState, setTimerState] = useState({ is_running: false, time_str: "25:00", progress: 0, distractions: 0, course: "General" });
             const [camFeed, setCamFeed] = useState(null);
             const [clockFeed, setClockFeed] = useState(null);
+
+            // ✅ refreshGoals FUNCTION
+            const refreshGoals = (data) => {
+                console.log('🔄 Refreshing goals with data:', data);
+                if (data && data.goals) {
+                    setGoals(data.goals);
+                }
+                if (data && data.flat_goals) {
+                    setFlatGoals(data.flat_goals);
+                }
+                if (!data && backend) {
+                    backend.request(JSON.stringify({action: 'init'})).then(res => {
+                        const data = JSON.parse(res);
+                        if (data.goals) setGoals(data.goals);
+                        if (data.flat_goals) setFlatGoals(data.flat_goals);
+                    });
+                }
+            };
 
             useEffect(() => {
                 if (typeof qt !== 'undefined') {
@@ -3715,7 +3874,7 @@ const startFocusSession = () => {
                                     sync_enabled: syncData.enabled,
                                     sync_repo_url: syncData.repo_url,
                                     sync_interval: syncData.interval,
-                                    has_token: syncData.has_token  // Add this line
+                                    has_token: syncData.has_token
                                 }));
                             });
                             py.request(JSON.stringify({action: 'get_mapped_folders'})).then(res => {
@@ -3735,16 +3894,29 @@ const startFocusSession = () => {
             
             const renderContent = () => {
                 switch(currentView) {
-                    case 'dashboard': return <DashboardView layout={layout} setLayout={setLayout} goals={goals} isEditingLayout={isEditingLayout} setIsEditingLayout={setIsEditingLayout} clockFeed={clockFeed} heatmap={heatmap} habits={habits} habitLogs={habitLogs} metrics={metrics} backend={backend} />;
+                    case 'dashboard': return <DashboardView 
+                        layout={layout} 
+                        setLayout={setLayout} 
+                        goals={goals} 
+                        isEditingLayout={isEditingLayout} 
+                        setIsEditingLayout={setIsEditingLayout} 
+                        clockFeed={clockFeed} 
+                        heatmap={heatmap} 
+                        habits={habits} 
+                        habitLogs={habitLogs} 
+                        metrics={metrics} 
+                        backend={backend}
+                        refreshGoals={refreshGoals}
+                    />;
                     case 'hub': return <ProductivityHubView backend={backend} timerState={timerState} camFeed={camFeed} flatGoals={flatGoals} queue={queue} refreshQueue={setQueue} settings={settings} />;
                     case 'architecture': return <LifeArchitectureView goals={goals} backend={backend} refreshGoals={(d) => {setGoals(d.goals); setFlatGoals(d.flat_goals);}} />;
                     case 'habits': return <HabitMatrixView 
-    habits={habits} 
-    backend={backend} 
-    refreshHabits={setHabits}
-    habitLogs={habitLogs}
-    setHabitLogs={setHabitLogs}
-/>;
+                        habits={habits} 
+                        backend={backend} 
+                        refreshHabits={setHabits}
+                        habitLogs={habitLogs}
+                        setHabitLogs={setHabitLogs}
+                    />;
                     case 'summary': return <DaySummaryView metrics={metrics} />;
                     case 'quiz': return <QuizEngineView quizzes={quizzes} backend={backend} refreshQuizzes={setQuizzes} flatGoals={flatGoals} />;
                     case 'flashcards': return <FlashcardsView flashcards={flashcards} backend={backend} refreshCards={setFlashcards} flatGoals={flatGoals} />;
