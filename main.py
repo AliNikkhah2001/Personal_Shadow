@@ -197,6 +197,7 @@ class ConfigManager:
             "allowed_apps": [],  # List of allowed app names
             "blocked_apps": [],  # List of blocked app names
             "auto_block": False,  # Auto-block disallowed apps
+            "target_hours": 5000,
         }
         try:
             with open(fn, 'r') as f: self.cfg = json.load(f)
@@ -1035,6 +1036,11 @@ class SystemBridge(QObject):
             self.ovl.show()
             self.vision.start()
             self.timer.start(1000)
+            
+            # Debug print
+            print(f"✅ Timer started: {self.current_course}, {self.total_time//60}m")
+            print(f"   Timer running: {self.is_running}, time_left: {self.time_left}")
+            
             return json.dumps({"status": "started"})
 
         elif action == "stop_timer":
@@ -1098,18 +1104,30 @@ class SystemBridge(QObject):
                     datetime.now().isoformat()
                 ))
             elif sub == "edit":
-                db.c.execute("UPDATE habits SET name=?, type=?, modified_at=? WHERE id=?", (req.get("name"), req.get("type"), datetime.now().isoformat(), req.get("id")))
+                db.c.execute("UPDATE habits SET name=?, type=?, modified_at=? WHERE id=?", 
+                            (req.get("name"), req.get("type"), datetime.now().isoformat(), req.get("id")))
             elif sub == "delete":
                 db.c.execute("DELETE FROM habits WHERE id=?", (req.get("id"),))
+                # Also delete associated logs
+                db.c.execute("DELETE FROM habit_logs WHERE habit_id=?", (req.get("id"),))
             elif sub == "toggle_log":
                 hid = req.get("habit_id")
                 dt = req.get("date")
-                st = req.get("status")
-                db.c.execute("SELECT id, uuid FROM habit_logs WHERE habit_id=? AND date=?", (hid, dt))
+                st = req.get("status", 1)  # Default to 1 if not provided
+                
+                print(f"🔄 Toggling log: habit_id={hid}, date={dt}, status={st}")
+                
+                # Check if log exists
+                db.c.execute("SELECT id FROM habit_logs WHERE habit_id=? AND date=?", (hid, dt))
                 existing = db.c.fetchone()
+                
                 if existing:
-                    db.c.execute("UPDATE habit_logs SET status=?, modified_at=? WHERE id=?", (st, datetime.now().isoformat(), existing[0]))
+                    # Update existing
+                    db.c.execute("UPDATE habit_logs SET status=?, modified_at=? WHERE id=?", 
+                                (st, datetime.now().isoformat(), existing[0]))
+                    print(f"✅ Updated habit log for {hid} on {dt} to {st}")
                 else:
+                    # Insert new
                     db.c.execute("""
                         INSERT INTO habit_logs (uuid, modified_at, habit_id, date, status)
                         VALUES (?, ?, ?, ?, ?)
@@ -1120,10 +1138,20 @@ class SystemBridge(QObject):
                         dt,
                         st
                     ))
+                    print(f"✅ Created habit log for {hid} on {dt} with status {st}")
+            
             db.conn.commit()
+            
+            # Fetch updated data
+            habits = [{"id": r[0], "name": r[1], "type": r[2]} for r in db.c.execute("SELECT id, name, type FROM habits").fetchall()]
+            habit_logs = [{"habit_id": r[0], "date": r[1], "status": r[2]} for r in db.c.execute("SELECT habit_id, date, status FROM habit_logs").fetchall()]
+            
+            print(f"📊 Current habits: {habits}")
+            print(f"📊 Current habit logs: {habit_logs}")
+            
             return json.dumps({
-                "habits": [{"id": r[0], "name": r[1], "type": r[2]} for r in db.c.execute("SELECT id, name, type FROM habits").fetchall()],
-                "habit_logs": [{"habit_id": r[0], "date": r[1], "status": r[2]} for r in db.c.execute("SELECT habit_id, date, status FROM habit_logs").fetchall()]
+                "habits": habits,
+                "habit_logs": habit_logs
             })
 
         elif action == "manage_note":
@@ -2301,23 +2329,71 @@ def get_html_content():
             const [activeTab, setActiveTab] = useState("timeline");
             const [showProcessList, setShowProcessList] = useState(false);
             const [selectedProcesses, setSelectedProcesses] = useState([]);
-
-            const startFocusSession = () => {
-                if (!backend) return;
-                
-                // Get running processes first
-                if (settings && settings.app_monitoring_enabled) {
-                    backend.request(JSON.stringify({action: 'get_processes'})).then(res => {
-                        const data = JSON.parse(res);
-                        setSelectedProcesses(data.processes || []);
-                        setShowProcessList(true);
-                    });
-                } else {
-                    // Start timer directly if app monitoring is disabled
-                    backend.request(JSON.stringify({action: 'start_timer', duration: dur, course: crs || "General"}));
-                }
-            };
-
+            const [isPaused, setIsPaused] = useState(false);
+const startFocusSession = () => {
+    if (!backend) {
+        console.error('Backend not available');
+        return;
+    }
+    
+    // If app monitoring is enabled and we haven't shown the process list yet
+    if (settings && settings.app_monitoring_enabled && !showProcessList) {
+        backend.request(JSON.stringify({action: 'get_processes'})).then(res => {
+            const data = JSON.parse(res);
+            setSelectedProcesses(data.processes || []);
+            setShowProcessList(true);
+        });
+        return;
+    }
+    
+    // Check if there are items in the queue
+    if (queue && queue.length > 0) {
+        // Start the first item in the queue
+        const firstItem = queue[0];
+        setCurrentQueueIndex(0);
+        
+        console.log(`Starting queue item: ${firstItem.title} (${firstItem.duration}m) - ${firstItem.type}`);
+        
+        backend.request(JSON.stringify({
+            action: 'start_timer', 
+            duration: firstItem.duration, 
+            course: firstItem.course || "General",
+            type: firstItem.type || "Work"
+        })).then(res => {
+            const data = JSON.parse(res);
+            if (data.status === 'started') {
+                setShowProcessList(false);
+                setIsPaused(false);
+            }
+        }).catch(err => {
+            console.error('Failed to start timer:', err);
+            alert('Failed to start timer. Check console for details.');
+        });
+    } else {
+        // If no queue items, create a new session from form
+        const duration = parseInt(dur) || 25;
+        const course = crs || "General";
+        const sessionType = type || "Work";
+        
+        console.log(`No queue items. Starting custom timer: ${duration}m, ${course}, ${sessionType}`);
+        
+        backend.request(JSON.stringify({
+            action: 'start_timer', 
+            duration: duration, 
+            course: course,
+            type: sessionType
+        })).then(res => {
+            const data = JSON.parse(res);
+            if (data.status === 'started') {
+                setShowProcessList(false);
+                setIsPaused(false);
+            }
+        }).catch(err => {
+            console.error('Failed to start timer:', err);
+            alert('Failed to start timer. Check console for details.');
+        });
+    }
+};
             // Add this modal before the main content
             {showProcessList && (
                 <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 backdrop-blur-md">
@@ -2335,15 +2411,33 @@ def get_html_content():
                             ))}
                         </div>
                         <div className="flex gap-3">
-                            <button onClick={() => {
-                                setShowProcessList(false);
-                                backend.request(JSON.stringify({action: 'start_timer', duration: dur, course: crs || "General"}));
-                            }} className="glass-button px-6 py-2 rounded text-xs font-bold tracking-widest text-white uppercase bg-green-600/50 border-green-500/50 hover:bg-green-600">
-                                <i className="fas fa-play mr-2"></i> Start Session
-                            </button>
-                            <button onClick={() => setShowProcessList(false)} className="glass-button px-6 py-2 rounded text-xs font-bold tracking-widest text-gray-300 uppercase border-white/10 hover:bg-white/5">
-                                Cancel
-                            </button>
+<button onClick={() => {
+    // Close modal and start timer
+    setShowProcessList(false);
+    const duration = parseInt(dur) || 25;
+    const course = crs || "General";
+    const sessionType = type || "Work";
+    
+    console.log(`Starting timer from modal: ${duration}m, ${course}, ${sessionType}`);
+    
+    backend.request(JSON.stringify({
+        action: 'start_timer', 
+        duration: duration, 
+        course: course,
+        type: sessionType
+    })).then(res => {
+        const data = JSON.parse(res);
+        console.log('Timer start response from modal:', data);
+        if (data.status !== 'started') {
+            alert('Failed to start timer. Please try again.');
+        }
+    }).catch(err => {
+        console.error('Failed to start timer from modal:', err);
+        alert('Failed to start timer. Check console for details.');
+    });
+}} className="glass-button px-6 py-2 rounded text-xs font-bold tracking-widest text-white uppercase bg-green-600/50 border-green-500/50 hover:bg-green-600">
+    <i className="fas fa-play mr-2"></i> Start Session
+</button>
                         </div>
                     </div>
                 </div>
@@ -2368,8 +2462,13 @@ def get_html_content():
 
             const toggleTimer = () => {
                 if (!backend) return;
-                if (timerState.is_running) backend.request(JSON.stringify({action: 'stop_timer'}));
-                else backend.request(JSON.stringify({action: 'start_timer', duration: dur, course: crs || "General"}));
+                if (timerState.is_running) {
+                    backend.request(JSON.stringify({action: 'stop_timer'}));
+                    setIsPaused(true);
+                } else {
+                    backend.request(JSON.stringify({action: 'start_timer', duration: dur, course: crs || "General"}));
+                    setIsPaused(false);
+                }
             };
 
             return (
@@ -2439,23 +2538,37 @@ def get_html_content():
                                         ))}
                                     </div>
                                 </div>
-
-                                <div className="flex justify-between items-end mt-4 shrink-0">
-                                    <div className={`text-6xl font-mono font-bold tracking-widest drop-shadow-lg ${timerState.is_running ? 'text-white' : 'text-gray-300'}`}>
-                                        {timerState.time_str || "25:00"}
-                                    </div>
-                                    <div className="flex gap-3">
-                                        <button onClick={toggleTimer} className={`px-8 py-3 rounded-lg text-xs font-bold tracking-widest text-white uppercase shadow-lg transition-colors ${timerState.is_running ? 'bg-green-700/80 hover:bg-green-600' : 'bg-green-600/50 hover:bg-green-600 border border-green-500/50'}`}>
-                                            {timerState.is_running ? 'LOG / RESUME' : 'START/RESUME'}
-                                        </button>
-                                        <button onClick={() => { if(timerState.is_running) toggleTimer(); }} className="px-8 py-3 rounded-lg text-xs font-bold tracking-widest text-white uppercase bg-yellow-600/50 hover:bg-yellow-600 border border-yellow-500/50 shadow-lg transition-colors">
-                                            PAUSE
-                                        </button>
-                                        <button onClick={() => { if(timerState.is_running) toggleTimer(); }} className="px-8 py-3 rounded-lg text-xs font-bold tracking-widest text-white uppercase bg-red-600/50 hover:bg-red-600 border border-red-500/50 shadow-lg transition-colors">
-                                            STOP
-                                        </button>
-                                    </div>
-                                </div>
+{/* Bottom Controls */}
+<div className="flex justify-between items-end mt-2 shrink-0">
+    <div>
+        <div className={`text-5xl font-mono font-bold tracking-widest drop-shadow-lg ${timerState.is_running ? 'text-white' : isPaused ? 'text-yellow-400' : 'text-gray-300'}`}>
+            {timerState.time_str || "25:00"}
+        </div>
+        <div className="text-xs text-gray-500 mt-1">
+            {timerState.is_running ? 'Session in progress' : isPaused ? '⏸ Paused' : 'Ready'}
+        </div>
+    </div>
+    <div className="flex gap-3">
+        {/* Start/Pause Toggle Button */}
+        <button onClick={toggleTimer} 
+            className={`px-6 py-3 rounded-lg text-xs font-bold tracking-widest text-white uppercase shadow-lg transition-colors 
+                ${timerState.is_running ? 'bg-yellow-600/50 hover:bg-yellow-600 border border-yellow-500/50' : 'bg-green-600/50 hover:bg-green-600 border border-green-500/50'}`}>
+            <i className={`fas ${timerState.is_running ? 'fa-pause' : 'fa-play'} mr-2`}></i>
+            {timerState.is_running ? 'Pause' : 'Start'}
+        </button>
+        
+        {/* Stop Button */}
+        <button onClick={() => { 
+            if (timerState.is_running) {
+                backend.request(JSON.stringify({action: 'stop_timer'}));
+                setIsPaused(false);
+            }
+        }} 
+            className="px-6 py-3 rounded-lg text-xs font-bold tracking-widest text-white uppercase bg-red-600/50 hover:bg-red-600 border border-red-500/50 shadow-lg transition-colors">
+            <i className="fas fa-stop mr-2"></i> Stop
+        </button>
+    </div>
+</div>
                             </div>
                         </div>
                     )}
@@ -2539,82 +2652,157 @@ def get_html_content():
             );
         };
 
-        const HabitMatrixView = ({ habits, backend, refreshHabits }) => {
-            const [newName, setNewName] = useState("");
-            const [newType, setNewType] = useState("Positive");
-            const [editingId, setEditingId] = useState(null);
-            
-            const handleAction = (sub, id, name, type) => {
-                backend.request(JSON.stringify({action: 'manage_habit', sub: sub, id: id, name: name || newName, type: type || newType})).then(res => {
-                    const data = JSON.parse(res);
-                    if(data.habits) refreshHabits(data.habits);
-                    setNewName(""); setEditingId(null);
-                });
-            };
-
-            const toggleLog = (hid, d) => {
-                backend.request(JSON.stringify({action: 'manage_habit', sub: 'toggle_log', habit_id: hid, date: d, status: 1})).then(res => {
-                     refreshHabits(JSON.parse(res).habits);
-                });
-            };
-
-            const days = ["Mon 1", "Tue 2", "Wed 3", "Thu 4", "Fri 5", "Sat 6", "Sun 7"];
-            return (
-                <div className="h-full flex flex-col fade-in">
-                    <div className="flex justify-between items-center mb-6 shrink-0">
-                        <h2 className="text-2xl font-serif font-bold text-white tracking-widest uppercase drop-shadow-md">Habit Matrix</h2>
-                        <span className="text-xs text-gray-400 font-mono">7-DAY ROLLING</span>
-                    </div>
-                    <div className="flex gap-2 mb-4 shrink-0 glass-panel p-2">
-                        <select className="glass-input px-3 py-1.5 rounded text-xs font-bold" value={newType} onChange={e => setNewType(e.target.value)}>
-                            <option value="Positive">Positive (+)</option><option value="Negative">Negative (-)</option>
-                        </select>
-                        <input type="text" placeholder="New Habit Name..." className="glass-input px-3 py-1.5 rounded text-xs font-bold flex-grow" value={newName} onChange={e => setNewName(e.target.value)} />
-                        <button onClick={() => handleAction('add')} className="glass-button px-4 py-1.5 rounded text-[11px] font-bold text-blue-300 uppercase">+ Add Habit</button>
-                    </div>
-                    <div className="glass-panel p-1 rounded-xl overflow-x-auto">
-                        <table className="w-full text-left border-collapse min-w-[600px]">
-                            <thead>
-                                <tr className="border-b border-white/10 bg-black/40">
-                                    <th className="p-4 text-xs font-bold text-gray-400 uppercase w-12 text-center">#</th>
-                                    <th className="p-4 text-xs font-bold text-gray-400 uppercase">Habit</th>
-                                    <th className="p-4 text-xs font-bold text-gray-400 uppercase text-center">Streak</th>
-                                    {days.map(day => (<th key={day} className="p-4 text-[10px] font-bold text-gray-400 uppercase text-center whitespace-nowrap">{day}</th>))}
-                                    <th className="p-4 text-[10px] font-bold text-gray-400 uppercase text-center">Actions</th>
+            const HabitMatrixView = ({ habits, backend, refreshHabits, habitLogs, setHabitLogs }) => {
+    const [newName, setNewName] = useState("");
+    const [newType, setNewType] = useState("Positive");
+    const [editingId, setEditingId] = useState(null);
+    
+    // Generate last 7 days
+    const days = [];
+    const today = new Date();
+    for (let i = 6; i >= 0; i--) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - i);
+        const dateStr = date.toLocaleDateString('en-US', { 
+            weekday: 'short', 
+            month: 'numeric', 
+            day: 'numeric' 
+        });
+        days.push(dateStr);
+    }
+    
+    const calculateStreak = (habitId) => {
+        if (!habitLogs || habitLogs.length === 0) return 0;
+        
+        const logs = habitLogs
+            .filter(log => log.habit_id === habitId)
+            .sort((a, b) => new Date(a.date) - new Date(b.date));
+        
+        if (logs.length === 0) return 0;
+        
+        let streak = 0;
+        for (let i = 0; i < days.length; i++) {
+            const log = logs.find(l => l.date === days[i]);
+            if (log && log.status === 1) {
+                streak++;
+            } else if (i > 0 && (!log || log.status === 0)) {
+                break;
+            }
+        }
+        return streak;
+    };
+    
+    const handleAction = (sub, id, name, type) => {
+        backend.request(JSON.stringify({
+            action: 'manage_habit', 
+            sub: sub, 
+            id: id, 
+            name: name || newName, 
+            type: type || newType
+        })).then(res => {
+            const data = JSON.parse(res);
+            console.log('Habit action response:', data);
+            if (data.habits) refreshHabits(data.habits);
+            if (data.habit_logs) setHabitLogs(data.habit_logs);
+            setNewName("");
+            setEditingId(null);
+        }).catch(err => {
+            console.error('Failed to manage habit:', err);
+            alert('Failed to update habit. Check console.');
+        });
+    };
+    
+    const toggleLog = (hid, dateStr) => {
+        console.log(`Toggling log for habit ${hid} on ${dateStr}`);
+        
+        const logExists = habitLogs && habitLogs.some(log => log.habit_id === hid && log.date === dateStr);
+        const currentStatus = logExists ? 1 : 0;
+        const newStatus = currentStatus === 1 ? 0 : 1;
+        
+        backend.request(JSON.stringify({
+            action: 'manage_habit', 
+            sub: 'toggle_log', 
+            habit_id: hid, 
+            date: dateStr, 
+            status: newStatus
+        })).then(res => {
+            const data = JSON.parse(res);
+            console.log('Toggle response:', data);
+            if (data.habits) refreshHabits(data.habits);
+            if (data.habit_logs) setHabitLogs(data.habit_logs);
+        }).catch(err => {
+            console.error('Failed to toggle habit log:', err);
+            alert('Failed to update habit. Check console.');
+        });
+    };
+    
+    return (
+        <div className="h-full flex flex-col fade-in">
+            <div className="flex justify-between items-center mb-6 shrink-0">
+                <h2 className="text-2xl font-serif font-bold text-white tracking-widest uppercase drop-shadow-md">Habit Matrix</h2>
+                <span className="text-xs text-gray-400 font-mono">7-DAY ROLLING</span>
+            </div>
+            <div className="flex gap-2 mb-4 shrink-0 glass-panel p-2">
+                <select className="glass-input px-3 py-1.5 rounded text-xs font-bold" value={newType} onChange={e => setNewType(e.target.value)}>
+                    <option value="Positive">Positive (+)</option>
+                    <option value="Negative">Negative (-)</option>
+                </select>
+                <input type="text" placeholder="New Habit Name..." className="glass-input px-3 py-1.5 rounded text-xs font-bold flex-grow" value={newName} onChange={e => setNewName(e.target.value)} />
+                <button onClick={() => handleAction('add')} className="glass-button px-4 py-1.5 rounded text-[11px] font-bold text-blue-300 uppercase">+ Add Habit</button>
+            </div>
+            <div className="glass-panel p-1 rounded-xl overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[600px]">
+                    <thead>
+                        <tr className="border-b border-white/10 bg-black/40">
+                            <th className="p-4 text-xs font-bold text-gray-400 uppercase w-12 text-center">#</th>
+                            <th className="p-4 text-xs font-bold text-gray-400 uppercase">Habit</th>
+                            <th className="p-4 text-xs font-bold text-gray-400 uppercase text-center">Streak</th>
+                            {days.map(day => (
+                                <th key={day} className="p-4 text-[10px] font-bold text-gray-400 uppercase text-center whitespace-nowrap">
+                                    {day}
+                                </th>
+                            ))}
+                            <th className="p-4 text-[10px] font-bold text-gray-400 uppercase text-center">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {habits && habits.map((h, idx) => {
+                            const isPos = h.type === 'Positive';
+                            const streak = calculateStreak(h.id);
+                            return (
+                                <tr key={h.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                                    <td className="p-4 text-xs font-mono text-gray-500 text-center">{idx + 1}</td>
+                                    <td className={`p-4 text-sm font-bold tracking-wide ${isPos ? 'text-green-400' : 'text-red-400'}`}>
+                                        {editingId === h.id ? (
+                                            <input type="text" className="glass-input px-2 py-1 rounded text-xs w-full" defaultValue={h.name} onBlur={(e) => handleAction('edit', h.id, e.target.value, h.type)} autoFocus />
+                                        ) : (
+                                            <span>{isPos ? '+' : '-'} {h.name}</span>
+                                        )}
+                                    </td>
+                                    <td className="p-4 text-xs font-mono text-blue-400 text-center font-bold">
+                                        {streak > 0 ? `${streak}d` : '—'}
+                                    </td>
+                                    {days.map((day, dIdx) => (
+                                        <td key={dIdx} className="p-4 text-center">
+                                            <input type="checkbox" 
+                                                onChange={() => toggleLog(h.id, day)}
+                                                checked={habitLogs && habitLogs.some(log => log.habit_id === h.id && log.date === day && log.status === 1)}
+                                                className={`w-5 h-5 rounded bg-black/40 border border-white/20 checked:border-transparent appearance-none cursor-pointer transition-all flex items-center justify-center checked:after:content-['✓'] checked:after:text-white checked:after:text-sm ${isPos ? 'checked:bg-green-500' : 'checked:bg-red-500'}`} />
+                                        </td>
+                                    ))}
+                                    <td className="p-4 text-center">
+                                        <i onClick={() => setEditingId(h.id)} className="fas fa-edit text-yellow-400 cursor-pointer mx-2 hover:scale-110"></i>
+                                        <i onClick={() => handleAction('delete', h.id)} className="fas fa-trash text-red-400 cursor-pointer mx-2 hover:scale-110"></i>
+                                    </td>
                                 </tr>
-                            </thead>
-                            <tbody>
-                                {habits && habits.map((h, idx) => {
-                                    const isPos = h.type === 'Positive';
-                                    return (
-                                        <tr key={h.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                                            <td className="p-4 text-xs font-mono text-gray-500 text-center">{idx + 1}</td>
-                                            <td className={`p-4 text-sm font-bold tracking-wide ${isPos ? 'text-green-400' : 'text-red-400'}`}>
-                                                {editingId === h.id ? (
-                                                    <input type="text" className="glass-input px-2 py-1 rounded text-xs w-full" defaultValue={h.name} onBlur={(e) => handleAction('edit', h.id, e.target.value, h.type)} autoFocus />
-                                                ) : <span>{isPos ? '+' : '-'} {h.name}</span>}
-                                            </td>
-                                            <td className="p-4 text-xs font-mono text-blue-400 text-center font-bold">12d</td>
-                                            {days.map((day, dIdx) => (
-                                                <td key={dIdx} className="p-4 text-center">
-                                                    <input type="checkbox" onChange={() => toggleLog(h.id, day)}
-                                                        className={`w-5 h-5 rounded bg-black/40 border border-white/20 checked:border-transparent appearance-none cursor-pointer transition-all flex items-center justify-center checked:after:content-['✓'] checked:after:text-white checked:after:text-sm ${isPos ? 'checked:bg-green-500' : 'checked:bg-red-500'}`}
-                                                        defaultChecked={Math.random() > 0.4} />
-                                                </td>
-                                            ))}
-                                            <td className="p-4 text-center">
-                                                <i onClick={() => setEditingId(h.id)} className="fas fa-edit text-yellow-400 cursor-pointer mx-2 hover:scale-110"></i>
-                                                <i onClick={() => handleAction('delete', h.id)} className="fas fa-trash text-red-400 cursor-pointer mx-2 hover:scale-110"></i>
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            );
-        };
+                            );
+                        })}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+};
 
         const DaySummaryView = ({ metrics }) => {
             const tdyStudy = metrics ? metrics.tdy_study : 0;
@@ -3197,13 +3385,20 @@ def get_html_content():
 </button>
     </div>
     
-    <div className="flex flex-col gap-1 text-[10px] text-gray-500">
-        <div><span className="font-bold">Device ID:</span> {settings.device_id || 'Not set'}</div>
-        <div><span className="font-bold">Repository:</span> {settings.sync_repo_url ? settings.sync_repo_url.split('/').slice(-2).join('/') : 'Not configured'}</div>
-        {settings.git_status === 'connected' && (
-            <div className="text-green-400">✓ GitHub connection verified</div>
-        )}
-    </div>
+<div className="flex flex-col gap-1 text-[10px] text-gray-500">
+    <div><span className="font-bold">Device ID:</span> {settings.device_id || 'Not set'}</div>
+    <div><span className="font-bold">Repository:</span> {settings.sync_repo_url ? settings.sync_repo_url.split('/').slice(-2).join('/') : 'Not configured'}</div>
+    <div><span className="font-bold">Last Sync:</span> {settings.git_last_sync || 'Never'}</div>
+    {settings.git_status === 'connected' && (
+        <div className="text-green-400">✓ GitHub connection verified</div>
+    )}
+    {settings.git_status === 'syncing' && (
+        <div className="text-yellow-400 animate-pulse">🔄 Syncing in progress...</div>
+    )}
+    {settings.git_status === 'error' && (
+        <div className="text-red-400">❌ Connection error - check token and repo</div>
+    )}
+</div>
 </div>
                             {/* File & Device Sync */}
                             <div className="md:col-span-2 text-blue-400 font-bold uppercase tracking-widest text-xs border-b border-white/10 pb-1">File & Device Sync</div>
@@ -3543,7 +3738,13 @@ def get_html_content():
                     case 'dashboard': return <DashboardView layout={layout} setLayout={setLayout} goals={goals} isEditingLayout={isEditingLayout} setIsEditingLayout={setIsEditingLayout} clockFeed={clockFeed} heatmap={heatmap} habits={habits} habitLogs={habitLogs} metrics={metrics} backend={backend} />;
                     case 'hub': return <ProductivityHubView backend={backend} timerState={timerState} camFeed={camFeed} flatGoals={flatGoals} queue={queue} refreshQueue={setQueue} settings={settings} />;
                     case 'architecture': return <LifeArchitectureView goals={goals} backend={backend} refreshGoals={(d) => {setGoals(d.goals); setFlatGoals(d.flat_goals);}} />;
-                    case 'habits': return <HabitMatrixView habits={habits} backend={backend} refreshHabits={setHabits} />;
+                    case 'habits': return <HabitMatrixView 
+    habits={habits} 
+    backend={backend} 
+    refreshHabits={setHabits}
+    habitLogs={habitLogs}
+    setHabitLogs={setHabitLogs}
+/>;
                     case 'summary': return <DaySummaryView metrics={metrics} />;
                     case 'quiz': return <QuizEngineView quizzes={quizzes} backend={backend} refreshQuizzes={setQuizzes} flatGoals={flatGoals} />;
                     case 'flashcards': return <FlashcardsView flashcards={flashcards} backend={backend} refreshCards={setFlashcards} flatGoals={flatGoals} />;
