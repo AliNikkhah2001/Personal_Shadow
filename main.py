@@ -17,7 +17,61 @@ import shutil
 from PyQt6.QtWidgets import QFileDialog
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+
+import git
+import machineid
+from pathlib import Path
+import threading
+import shutil
+import hashlib
+# Add this after the imports
+import os
+from dotenv import load_dotenv
+
+
+
+
 CACHE_DIR = os.path.abspath("shadow_os_cache")
+
+
+
+
+
+
+# At the top of main.py, after imports
+import os
+
+def load_env_file():
+    env_file = os.path.join(os.path.dirname(__file__), '.env')
+    print(f"Looking for .env at: {env_file}")
+    
+    if os.path.exists(env_file):
+        try:
+            with open(env_file, 'r', encoding='utf-8-sig') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#'):
+                        if '=' in line:
+                            key, value = line.split('=', 1)
+                            os.environ[key.strip()] = value.strip().strip('"\'')
+            token = os.getenv('GITHUB_TOKEN', '')
+            if token:
+                print(f"✅ GitHub token loaded from .env ({token[:10]}...{token[-4:]})")
+            else:
+                print("⚠️ GITHUB_TOKEN not found in .env file")
+            return True
+        except Exception as e:
+            print(f"⚠️ Could not load .env: {e}")
+            return False
+    else:
+        print("ℹ️ No .env file found. GitHub sync will use token from config if available.")
+        return False
+
+# Load environment variables
+load_env_file()
+
+# Get GitHub token
+GITHUB_TOKEN = os.getenv('GITHUB_TOKEN', '')
 
 class DownloaderThread(QThread):
     progress = pyqtSignal(int)
@@ -132,6 +186,17 @@ class ConfigManager:
             "deadline_date": (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d %H:%M"),
             "mute_sounds": True,
             "mute_speech": True,
+            "sync_enabled": True,
+            "sync_repo_url": "https://github.com/alinikkhah2001/Personal_Shadow.git",
+            "sync_device_name": "Win",
+            "sync_interval": 360,  # seconds (1 hour)
+            "sync_local_paths": ['sample'],  # List of folders to sync
+            "sync_github_token": "",  # Store securely
+            "quiet_mode": False,
+            "app_monitoring_enabled": False,  # Enable/disable app monitoring
+            "allowed_apps": [],  # List of allowed app names
+            "blocked_apps": [],  # List of blocked app names
+            "auto_block": False,  # Auto-block disallowed apps
         }
         try:
             with open(fn, 'r') as f: self.cfg = json.load(f)
@@ -151,71 +216,111 @@ class DatabaseManager:
         self.setup()
         
     def setup(self):
+        # Create all tables with uuid and modified_at from the start
         self.c.executescript('''
-            CREATE TABLE IF NOT EXISTS courses (id INTEGER PRIMARY KEY, name TEXT UNIQUE, target_hours REAL DEFAULT 0);
-            CREATE TABLE IF NOT EXISTS pomodoro_sessions (id INTEGER PRIMARY KEY, course TEXT, duration INTEGER, actual_duration INTEGER, timestamp TEXT, type TEXT, distractions INTEGER DEFAULT 0, timelapse_path TEXT, distraction_data TEXT);
-            CREATE TABLE IF NOT EXISTS cascading_goals (id INTEGER PRIMARY KEY, parent_id INTEGER, level TEXT, title TEXT, category TEXT, target_hours REAL DEFAULT 0, logged_hours REAL DEFAULT 0, deadline TEXT);
-            CREATE TABLE IF NOT EXISTS habits (id INTEGER PRIMARY KEY, name TEXT UNIQUE, created_at TEXT);
-            CREATE TABLE IF NOT EXISTS habit_logs (id INTEGER PRIMARY KEY, habit_id INTEGER, date TEXT, status INTEGER);
-            CREATE TABLE IF NOT EXISTS flashcards (id INTEGER PRIMARY KEY, front TEXT, back TEXT, deck TEXT, next_review TEXT);
-            CREATE TABLE IF NOT EXISTS quizzes (id INTEGER PRIMARY KEY, title TEXT, questions_json TEXT);
-            CREATE TABLE IF NOT EXISTS focus_queue (id INTEGER PRIMARY KEY, title TEXT, duration INTEGER, type TEXT, status TEXT);
-            CREATE TABLE IF NOT EXISTS notes (id INTEGER PRIMARY KEY, title TEXT, content TEXT, timestamp TEXT);
+            CREATE TABLE IF NOT EXISTS courses (
+                id INTEGER PRIMARY KEY, 
+                name TEXT UNIQUE, 
+                target_hours REAL DEFAULT 0,
+                uuid TEXT UNIQUE,
+                modified_at TEXT
+            );
+            
+            CREATE TABLE IF NOT EXISTS pomodoro_sessions (
+                id INTEGER PRIMARY KEY, 
+                course TEXT, 
+                duration INTEGER, 
+                actual_duration INTEGER, 
+                timestamp TEXT, 
+                type TEXT, 
+                distractions INTEGER DEFAULT 0, 
+                timelapse_path TEXT, 
+                distraction_data TEXT,
+                uuid TEXT UNIQUE,
+                modified_at TEXT
+            );
+            
+            CREATE TABLE IF NOT EXISTS cascading_goals (
+                id INTEGER PRIMARY KEY, 
+                parent_id INTEGER, 
+                level TEXT, 
+                title TEXT, 
+                category TEXT, 
+                target_hours REAL DEFAULT 0, 
+                logged_hours REAL DEFAULT 0, 
+                deadline TEXT,
+                uuid TEXT UNIQUE,
+                modified_at TEXT
+            );
+            
+            CREATE TABLE IF NOT EXISTS habits (
+                id INTEGER PRIMARY KEY, 
+                name TEXT UNIQUE, 
+                created_at TEXT,
+                type TEXT DEFAULT 'Positive',
+                uuid TEXT UNIQUE,
+                modified_at TEXT
+            );
+            
+            CREATE TABLE IF NOT EXISTS habit_logs (
+                id INTEGER PRIMARY KEY, 
+                habit_id INTEGER, 
+                date TEXT, 
+                status INTEGER DEFAULT 0,
+                uuid TEXT UNIQUE,
+                modified_at TEXT
+            );
+            
+            CREATE TABLE IF NOT EXISTS flashcards (
+                id INTEGER PRIMARY KEY, 
+                front TEXT, 
+                back TEXT, 
+                deck TEXT, 
+                next_review TEXT,
+                course TEXT,
+                folder TEXT DEFAULT 'Uncategorized',
+                color TEXT DEFAULT '#3b82f6',
+                uuid TEXT UNIQUE,
+                modified_at TEXT
+            );
+            
+            CREATE TABLE IF NOT EXISTS quizzes (
+                id INTEGER PRIMARY KEY, 
+                title TEXT, 
+                questions_json TEXT,
+                course TEXT,
+                folder TEXT DEFAULT 'Uncategorized',
+                color TEXT DEFAULT '#3b82f6',
+                uuid TEXT UNIQUE,
+                modified_at TEXT
+            );
+            
+            CREATE TABLE IF NOT EXISTS focus_queue (
+                id INTEGER PRIMARY KEY, 
+                title TEXT, 
+                duration INTEGER, 
+                type TEXT, 
+                status TEXT,
+                course TEXT,
+                uuid TEXT UNIQUE,
+                modified_at TEXT
+            );
+            
+            CREATE TABLE IF NOT EXISTS notes (
+                id INTEGER PRIMARY KEY, 
+                title TEXT, 
+                content TEXT, 
+                timestamp TEXT,
+                course TEXT,
+                folder TEXT DEFAULT 'Uncategorized',
+                color TEXT DEFAULT '#3b82f6',
+                uuid TEXT UNIQUE,
+                modified_at TEXT
+            );
         ''')
-
-        # Comprehensive Safe Migrations
-        migrations = [
-            "ALTER TABLE flashcards ADD COLUMN deck TEXT;",
-            "ALTER TABLE flashcards ADD COLUMN next_review TEXT;",
-            "ALTER TABLE flashcards ADD COLUMN course TEXT;",
-            "ALTER TABLE quizzes ADD COLUMN course TEXT;",
-            "ALTER TABLE notes ADD COLUMN course TEXT;",
-            "ALTER TABLE focus_queue ADD COLUMN course TEXT;",
-            "ALTER TABLE notes ADD COLUMN folder TEXT DEFAULT 'Uncategorized';",
-            "ALTER TABLE notes ADD COLUMN color TEXT DEFAULT '#3b82f6';",
-            "ALTER TABLE habits ADD COLUMN type TEXT DEFAULT 'Positive';",
-            "ALTER TABLE habits ADD COLUMN created_at TEXT;",
-            "ALTER TABLE flashcards ADD COLUMN folder TEXT DEFAULT 'Uncategorized';",
-            "ALTER TABLE flashcards ADD COLUMN color TEXT DEFAULT '#3b82f6';",
-            "ALTER TABLE quizzes ADD COLUMN folder TEXT DEFAULT 'Uncategorized';",
-            "ALTER TABLE quizzes ADD COLUMN color TEXT DEFAULT '#3b82f6';",
-            "ALTER TABLE habit_logs ADD COLUMN status INTEGER DEFAULT 0;",
-            "ALTER TABLE cascading_goals ADD COLUMN level TEXT;",
-            "ALTER TABLE cascading_goals ADD COLUMN category TEXT;",
-            "ALTER TABLE cascading_goals ADD COLUMN target_hours REAL DEFAULT 0;",
-            "ALTER TABLE cascading_goals ADD COLUMN logged_hours REAL DEFAULT 0;",
-        ]
-
-        for mig in migrations:
-            try: self.c.execute(mig)
-            except sqlite3.OperationalError: pass
-
-        # UUID and modified_at for all tables
-        uuid_migrations = [
-            "ALTER TABLE courses ADD COLUMN uuid TEXT UNIQUE",
-            "ALTER TABLE courses ADD COLUMN modified_at TEXT",
-            "ALTER TABLE pomodoro_sessions ADD COLUMN uuid TEXT UNIQUE",
-            "ALTER TABLE pomodoro_sessions ADD COLUMN modified_at TEXT",
-            "ALTER TABLE cascading_goals ADD COLUMN uuid TEXT UNIQUE",
-            "ALTER TABLE cascading_goals ADD COLUMN modified_at TEXT",
-            "ALTER TABLE habits ADD COLUMN uuid TEXT UNIQUE",
-            "ALTER TABLE habits ADD COLUMN modified_at TEXT",
-            "ALTER TABLE habit_logs ADD COLUMN uuid TEXT UNIQUE",
-            "ALTER TABLE habit_logs ADD COLUMN modified_at TEXT",
-            "ALTER TABLE flashcards ADD COLUMN uuid TEXT UNIQUE",
-            "ALTER TABLE flashcards ADD COLUMN modified_at TEXT",
-            "ALTER TABLE quizzes ADD COLUMN uuid TEXT UNIQUE",
-            "ALTER TABLE quizzes ADD COLUMN modified_at TEXT",
-            "ALTER TABLE focus_queue ADD COLUMN uuid TEXT UNIQUE",
-            "ALTER TABLE focus_queue ADD COLUMN modified_at TEXT",
-            "ALTER TABLE notes ADD COLUMN uuid TEXT UNIQUE",
-            "ALTER TABLE notes ADD COLUMN modified_at TEXT",
-        ]
-        for mig in uuid_migrations:
-            try: self.c.execute(mig)
-            except sqlite3.OperationalError: pass
-
+        
         self.conn.commit()
+
 db = DatabaseManager()
 
 def get_color(c_name): 
@@ -430,6 +535,11 @@ class VisionTracker(QObject):
         self.fc = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_alt2.xml')
 
     def start(self):
+        # Check if Quiet Mode is enabled
+        if config.get("quiet_mode", False):
+            print("🔇 Quiet Mode: Webcam disabled")
+            return  # Don't start webcam
+            
         if not self.cap or not self.cap.isOpened():
             for i in [0, 1]:
                 if sys.platform == "win32":
@@ -467,6 +577,7 @@ class SystemBridge(QObject):
     state_update = pyqtSignal(str)
     video_feed = pyqtSignal(str)
     clock_feed = pyqtSignal(str)
+    sync_completed = pyqtSignal(bool, str)  # Add this line
 
     def __init__(self):
         super().__init__()
@@ -492,12 +603,152 @@ class SystemBridge(QObject):
         self.snd_dist.setVolume(1.0)
         self.backup_timer = QTimer()
         self.backup_timer.timeout.connect(self.backup_data)
-        self.backup_timer.start(3600 * 100) 
+        self.backup_timer.start(3600 * 1000) 
+        # Quiet Mode - disable webcam and sounds if enabled
+        self.quiet_mode = config.get("quiet_mode", False)
+        if self.quiet_mode:
+            self.snd_dist.setVolume(0.0)  # Mute sounds
+            print("🔇 Quiet Mode enabled - Webcam and sounds disabled")
 
 
 
+                # Add sync manager
+        self.sync_manager = SyncManager()
+        
+        # Sync timer
+        self.sync_timer = QTimer()
+        self.sync_timer.timeout.connect(self.auto_sync)
+        if config.get("sync_enabled", False):
+            interval = config.get("sync_interval", 3600) * 1000  # convert to ms
+            self.sync_timer.start(interval)
+        
+    def handle_sync_result(self, success, msg):
+        """Handle the result of a sync operation"""
+        print(f"Sync completed: {success} - {msg}")
+        if success:
+            print(f"✅ Sync successful: {msg}")
+        else:
+            print(f"❌ Sync failed: {msg}")
+            # Show the error in a more visible way
+            QApplication.beep()
+    def get_running_processes(self):
+        """Get list of running processes with details"""
+        processes = []
+        
+        try:
+            import psutil
+            for proc in psutil.process_iter(['pid', 'name', 'exe', 'cpu_percent', 'memory_percent', 'create_time']):
+                try:
+                    info = proc.info
+                    processes.append({
+                        'pid': info['pid'],
+                        'name': info['name'],
+                        'exe': info['exe'],
+                        'cpu': info['cpu_percent'] or 0,
+                        'memory': info['memory_percent'] or 0,
+                        'create_time': info['create_time']
+                    })
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+            processes.sort(key=lambda x: x['cpu'], reverse=True)
+            return processes
+        except ImportError:
+            # Fallback for when psutil is not installed
+            if sys.platform == "win32":
+                try:
+                    result = subprocess.run(['tasklist', '/FO', 'CSV', '/NH'], 
+                                        capture_output=True, text=True)
+                    lines = result.stdout.strip().split('\n')
+                    for line in lines:
+                        parts = line.strip('"').split('","')
+                        if len(parts) >= 2:
+                            processes.append({
+                                'pid': parts[1],
+                                'name': parts[0],
+                                'exe': '',
+                                'cpu': 0,
+                                'memory': 0,
+                                'create_time': 0
+                            })
+                except:
+                    pass
+            else:
+                try:
+                    result = subprocess.run(['ps', 'aux'], capture_output=True, text=True)
+                    lines = result.stdout.strip().split('\n')[1:]
+                    for line in lines:
+                        parts = line.split()
+                        if len(parts) >= 11:
+                            processes.append({
+                                'pid': parts[1],
+                                'name': parts[10] if len(parts) > 10 else parts[0],
+                                'exe': '',
+                                'cpu': float(parts[2]) if len(parts) > 2 else 0,
+                                'memory': float(parts[3]) if len(parts) > 3 else 0,
+                                'create_time': 0
+                            })
+                except:
+                    pass
+        return processes
+
+    def check_processes_for_distraction(self):
+        """Check if any disallowed processes are running"""
+        if not config.get("app_monitoring_enabled", False):
+            return []
+        
+        allowed = config.get("allowed_apps", [])
+        blocked = config.get("blocked_apps", [])
+        
+        if not blocked and not allowed:
+            return []  # No monitoring configured
+        
+        running = self.get_running_processes()
+        distractions = []
+        
+        for proc in running:
+            proc_name = proc['name'].lower()
+            
+            # If blocked list exists, check against it
+            if blocked:
+                for blocked_name in blocked:
+                    if blocked_name.lower() in proc_name:
+                        distractions.append(proc)
+                        break
+            # If only allowed list exists, check against it
+            elif allowed:
+                is_allowed = False
+                for allowed_name in allowed:
+                    if allowed_name.lower() in proc_name:
+                        is_allowed = True
+                        break
+                if not is_allowed:
+                    distractions.append(proc)
+        
+        return distractions
+
+    def get_app_monitoring_status(self):
+        """Get current app monitoring configuration"""
+        return {
+            'enabled': config.get("app_monitoring_enabled", False),
+            'allowed_apps': config.get("allowed_apps", []),
+            'blocked_apps': config.get("blocked_apps", []),
+            'auto_block': config.get("auto_block", False)
+        }
+
+    def set_allowed_apps(self, apps):
+        """Set allowed apps list"""
+        config.set("allowed_apps", apps)
+        return True
+
+    def set_blocked_apps(self, apps):
+        """Set blocked apps list"""
+        config.set("blocked_apps", apps)
+        return True
 
 
+    def auto_sync(self):
+        if config.get("sync_enabled", False):
+            self.sync_manager.sync()
 
 
     def backup_data(self):
@@ -507,12 +758,16 @@ class SystemBridge(QObject):
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         backup_path = os.path.join(backup_dir, f"auto_backup_{timestamp}.zip")
         
-        # Reuse export logic (but without asking user)
+        # Remove token from backup
+        settings = config.cfg.copy()
+        if "sync_github_token" in settings:
+            settings["sync_github_token"] = ""
+        
         data = {
-            "settings": config.cfg,
+            "settings": settings,
             "tables": {}
         }
-        tables = ["courses", "pomodorosessions", "cascading_goals", "habits", "habit_logs",
+        tables = ["courses", "pomodoro_sessions", "cascading_goals", "habits", "habit_logs",
                 "flashcards", "quizzes", "focus_queue", "notes"]
         for table in tables:
             db.c.execute(f"SELECT * FROM {table}")
@@ -525,9 +780,6 @@ class SystemBridge(QObject):
             zipf.writestr("data.json", json.dumps(data, indent=2))
         with open(backup_path, 'wb') as f:
             f.write(zip_buffer.getvalue())
-
-
-
 
 
 
@@ -600,9 +852,19 @@ class SystemBridge(QObject):
                     "ydy_study": ydy_study / 60.0,
                     "tdy_dist": tdy_dist,
                     "ydy_dist": ydy_dist,
-                    "hourly_vol": vols
+                    "hourly_vol": vols,
+                    "total_study_hours": tdy_study / 60.0  # Add this line
                 }
             })
+
+
+
+
+
+
+
+
+
 
         elif action == "save_settings":
             new_settings = req.get("data", {})
@@ -610,6 +872,106 @@ class SystemBridge(QObject):
                 config.set(k, v)
             self.snd_dist.setSource(QUrl.fromLocalFile(f"/System/Library/Sounds/{config.get('sound_cam_dist', 'Basso')}.aiff"))
             return json.dumps({"status": "saved"})
+
+        elif action == "get_git_status":
+            try:
+                repo_path = os.path.join(os.path.expanduser("~"), ".mindpalace_sync_repo")
+                if os.path.exists(repo_path):
+                    repo = git.Repo(repo_path)
+                    # Check if remote exists
+                    try:
+                        remote = repo.remotes.origin
+                        # Check if we can fetch
+                        remote.fetch(dry_run=True)
+                        status = "connected"
+                    except:
+                        status = "error"
+                    last_commit = repo.head.commit.committed_datetime.isoformat() if repo.head.is_valid() else None
+                    return json.dumps({
+                        "status": status,
+                        "last_sync": last_commit,
+                        "branch": repo.active_branch.name if repo.head.is_valid() else "none"
+                    })
+                else:
+                    return json.dumps({"status": "not_initialized", "last_sync": None})
+            except Exception as e:
+                return json.dumps({"status": "error", "error": str(e)})
+
+        elif action == "open_folder_dialog":
+            parent = QApplication.activeWindow()
+            folder_path = QFileDialog.getExistingDirectory(
+                parent, "Select Folder to Sync", "",
+                QFileDialog.Option.ShowDirsOnly
+            )
+            return json.dumps({"path": folder_path if folder_path else ""})
+
+        elif action == "sync_now":
+            # Run sync in a separate thread to prevent UI freeze
+            import threading
+            import traceback
+            
+            def sync_thread():
+                try:
+                    success, msg = self.sync_manager.sync()
+                    # Emit result back to the UI
+                    self.sync_completed.emit(success, msg if msg else "Sync completed" if success else "Sync failed - unknown error")
+                except Exception as e:
+                    error_msg = f"Sync error: {str(e)}\n{traceback.format_exc()}"
+                    print(error_msg)
+                    self.sync_completed.emit(False, f"Error: {str(e)}")
+            
+            # Make sure the signal is connected
+            try:
+                self.sync_completed.disconnect()
+            except:
+                pass
+            self.sync_completed.connect(self.handle_sync_result)
+            
+            thread = threading.Thread(target=sync_thread)
+            thread.daemon = True
+            thread.start()
+            
+            return json.dumps({"status": "started"})
+        elif action == "get_device_id":
+            return json.dumps({"device_id": self.sync_manager.device_id})
+
+        elif action == "map_folder":
+            path = req.get("path", "")
+            if os.path.exists(path):
+                self.sync_manager.map_folder(path)
+                return json.dumps({"status": "success", "path": path})
+            return json.dumps({"status": "error", "message": "Path does not exist"})
+
+        elif action == "unmap_folder":
+            path = req.get("path", "")
+            self.sync_manager.unmap_folder(path)
+            return json.dumps({"status": "success", "path": path})
+
+        elif action == "get_mapped_folders":
+            return json.dumps({"folders": config.get("sync_local_paths", [])})
+
+        elif action == "get_sync_status":
+            return json.dumps({
+                "enabled": config.get("sync_enabled", False),
+                "device_id": self.sync_manager.device_id,
+                "repo_url": config.get("sync_repo_url", ""),
+                "interval": config.get("sync_interval", 3600),
+                "has_token": bool(GITHUB_TOKEN)  # Use the global variable
+            })
+
+        elif action == "set_quiet_mode":
+            enabled = req.get("enabled", False)
+            config.set("quiet_mode", enabled)
+            self.quiet_mode = enabled
+            if enabled:
+                self.snd_dist.setVolume(0.0)
+                self.vision.stop()
+                self.vision.cap = None
+                print("🔇 Quiet Mode enabled")
+            else:
+                self.snd_dist.setVolume(1.0)
+                print("🔊 Quiet Mode disabled")
+            return json.dumps({"status": "ok", "quiet_mode": enabled})
 
         elif action == "reset_data":
             db.c.execute("DELETE FROM pomodoro_sessions")
@@ -625,6 +987,43 @@ class SystemBridge(QObject):
                 "All Files (*.*);;JSON (*.json);;Images (*.png *.jpg)"
             )
             return json.dumps({"path": file_path if file_path else ""})
+
+
+
+        elif action == "get_processes":
+            processes = self.get_running_processes()
+            # Return only the process name and pid for UI
+            process_list = [{'name': p['name'], 'pid': p['pid']} for p in processes[:50]]
+            return json.dumps({"processes": process_list})
+
+        elif action == "get_app_monitoring_status":
+            return json.dumps(self.get_app_monitoring_status())
+
+        elif action == "set_allowed_apps":
+            apps = req.get("apps", [])
+            self.set_allowed_apps(apps)
+            return json.dumps({"status": "ok", "allowed_apps": apps})
+
+        elif action == "set_blocked_apps":
+            apps = req.get("apps", [])
+            self.set_blocked_apps(apps)
+            return json.dumps({"status": "ok", "blocked_apps": apps})
+
+        elif action == "set_app_monitoring":
+            enabled = req.get("enabled", False)
+            config.set("app_monitoring_enabled", enabled)
+            return json.dumps({"status": "ok", "enabled": enabled})
+
+        elif action == "set_auto_block":
+            enabled = req.get("enabled", False)
+            config.set("auto_block", enabled)
+            return json.dumps({"status": "ok", "auto_block": enabled})
+
+        elif action == "check_current_distractions":
+            distractions = self.check_processes_for_distraction()
+            return json.dumps({"distractions": distractions})
+
+
 
         elif action == "start_timer":
             self.current_course = req.get("course", "General")
@@ -823,8 +1222,8 @@ class SystemBridge(QObject):
                 "settings": config.cfg,
                 "tables": {}
             }
-            tables = ["courses", "pomodorosessions", "cascading_goals", "habits", "habit_logs",
-                      "flashcards", "quizzes", "focus_queue", "notes"]
+            tables = ["courses", "pomodoro_sessions", "cascading_goals", "habits", "habit_logs",
+                    "flashcards", "quizzes", "focus_queue", "notes"]
             for table in tables:
                 db.c.execute(f"SELECT * FROM {table}")
                 columns = [desc[0] for desc in db.c.description]
@@ -849,7 +1248,7 @@ class SystemBridge(QObject):
                     data = json.load(f)
             tables_data = data.get("tables", {})
             order = ["courses", "habits", "cascading_goals", "flashcards", "quizzes",
-                     "notes", "focus_queue", "habit_logs", "pomodorosessions"]
+                    "notes", "focus_queue", "habit_logs", "pomodoro_sessions"]
             for table in order:
                 if table not in tables_data:
                     continue
@@ -941,22 +1340,44 @@ class SystemBridge(QObject):
         b64 = base64.b64encode(buf.data()).decode('utf-8')
         self.clock_feed.emit(f"data:image/png;base64,{b64}")
 
+ 
     def tick(self):
-        if not self.is_running: return
+        if not self.is_running: 
+            return
         
-        att, b64_frame = self.vision.process_frame()
-        if b64_frame:
-            self.video_feed.emit(b64_frame)
-            
+        # Check webcam if not in quiet mode
+        att = True
         dist_mode = "None"
-        if not att:
-            self.distractions += 1
-            dist_mode = "Camera"
-            pct_done = 100 - int((self.time_left / self.total_time) * 100) if self.total_time > 0 else 0
-            self.distraction_markers.append(pct_done)
-            if self.distractions % 5 == 0:
-                self.snd_dist.play()
-                subprocess.Popen(["osascript", "-e", "set volume output volume 100"])
+        
+        if not config.get("quiet_mode", False):
+            att, b64_frame = self.vision.process_frame()
+            if b64_frame:
+                self.video_feed.emit(b64_frame)
+            
+            if not att:
+                self.distractions += 1
+                dist_mode = "Camera"
+                self.distraction_markers.append(100 - int((self.time_left / self.total_time) * 100) if self.total_time > 0 else 0)
+                if self.distractions % 5 == 0 and not config.get("quiet_mode", False):
+                    self.play_sound()
+        
+        # Check running processes for distractions
+        if config.get("app_monitoring_enabled", False):
+            app_distractions = self.check_processes_for_distraction()
+            if app_distractions:
+                # Mark as distraction (App mode)
+                if dist_mode == "None":
+                    dist_mode = "App"
+                    self.distractions += 1
+                    self.distraction_markers.append(100 - int((self.time_left / self.total_time) * 100) if self.total_time > 0 else 0)
+                
+                # Log the distracting apps
+                for proc in app_distractions[:3]:  # Log up to 3
+                    print(f"⚠️ Distracting app detected: {proc['name']} (PID: {proc['pid']})")
+                
+                # Auto-block if enabled
+                if config.get("auto_block", False):
+                    self.kill_processes(app_distractions)
 
         if self.time_left > 0:
             self.time_left -= 1
@@ -965,9 +1386,24 @@ class SystemBridge(QObject):
             self.timer.stop()
             self.ovl.hide()
             self.vision.stop()
-            subprocess.Popen(["say", config.get("speech_comp", "Session Complete.")])
-            
+            if not config.get("quiet_mode", False):
+                self.speak(config.get("speech_comp", "Session Complete."))
+        
         self.push_state(dist_mode)
+
+    def kill_processes(self, processes):
+        """Kill distracting processes (cross-platform)"""
+        try:
+            import psutil
+            for proc in processes[:3]:  # Kill up to 3 processes
+                try:
+                    p = psutil.Process(proc['pid'])
+                    p.terminate()
+                    print(f"🔫 Killed process: {proc['name']} (PID: {proc['pid']})")
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+        except:
+            pass
 
     def push_state(self, dist_mode="None"):
         mins, secs = divmod(self.time_left, 60)
@@ -1024,6 +1460,480 @@ class SystemBridge(QObject):
                 if hrs > 6: intensity = 4
                 matrix[w][d] = intensity
         return matrix
+
+
+
+
+
+class SyncManager(QObject):
+    sync_progress = pyqtSignal(str)
+    sync_completed = pyqtSignal(bool, str)
+    
+    def __init__(self, device_id=None):
+        super().__init__()
+        self.device_id = device_id or self.get_device_id()
+        self.repo = None
+        self.repo_path = os.path.join(os.path.expanduser("~"), ".mindpalace_sync_repo")
+        self.sync_data_file = "sync_data.json"
+        self.files_dir = "files"
+        
+        # Get token from environment variable FIRST
+        self.token = os.getenv('GITHUB_TOKEN', '')
+        # If not in env, fallback to config (but don't save to config)
+        if not self.token:
+            self.token = config.get("sync_github_token", "")
+        
+        self.repo_url = config.get("sync_repo_url", "")
+    def safe_insert_or_update(self, table, row):
+        """Safely insert or update a record handling UNIQUE constraints"""
+        uid = row.get("uuid")
+        if not uid:
+            uid = uuid.uuid4().hex
+            row["uuid"] = uid
+        
+        # Check by UUID first
+        db.c.execute(f"SELECT id FROM {table} WHERE uuid = ?", (uid,))
+        existing = db.c.fetchone()
+        
+        if existing:
+            # Update existing
+            existing_id = existing[0]
+            set_clause = ", ".join([f"{k} = ?" for k in row.keys() if k not in ["id", "uuid"]])
+            values = [row[k] for k in row.keys() if k not in ["id", "uuid"]] + [existing_id]
+            try:
+                db.c.execute(f"UPDATE {table} SET {set_clause} WHERE id = ?", values)
+                return True, "updated"
+            except sqlite3.IntegrityError as e:
+                # If UUID update fails, try finding by name for habits
+                if table == "habits" and "name" in row:
+                    name = row.get("name")
+                    db.c.execute(f"SELECT id FROM {table} WHERE name = ? AND uuid != ?", (name, uid))
+                    by_name = db.c.fetchone()
+                    if by_name:
+                        # Update by name instead
+                        existing_id = by_name[0]
+                        set_clause = ", ".join([f"{k} = ?" for k in row.keys() if k not in ["id", "uuid", "name"]])
+                        values = [row[k] for k in row.keys() if k not in ["id", "uuid", "name"]] + [existing_id]
+                        db.c.execute(f"UPDATE {table} SET {set_clause} WHERE id = ?", values)
+                        return True, "updated_by_name"
+                return False, str(e)
+        else:
+            # Insert new
+            row.pop("id", None)
+            cols = ", ".join(row.keys())
+            placeholders = ", ".join(["?"] * len(row))
+            try:
+                db.c.execute(f"INSERT INTO {table} ({cols}) VALUES ({placeholders})", list(row.values()))
+                return True, "inserted"
+            except sqlite3.IntegrityError as e:
+                if "UNIQUE constraint" in str(e) and table == "habits":
+                    # Try to find by name and update
+                    name = row.get("name")
+                    if name:
+                        db.c.execute(f"SELECT id FROM {table} WHERE name = ?", (name,))
+                        by_name = db.c.fetchone()
+                        if by_name:
+                            existing_id = by_name[0]
+                            set_clause = ", ".join([f"{k} = ?" for k in row.keys() if k not in ["id", "uuid", "name"]])
+                            values = [row[k] for k in row.keys() if k not in ["id", "uuid", "name"]] + [existing_id]
+                            db.c.execute(f"UPDATE {table} SET {set_clause} WHERE id = ?", values)
+                            return True, "updated_by_name_after_fail"
+                return False, str(e)
+    def get_device_id(self):
+        """Get a consistent device ID using multiple strategies"""
+        try:
+            # Try py-machineid first
+            return machineid.id()
+        except:
+            try:
+                # Fallback: generate from system info
+                import platform
+                import socket
+                data = f"{platform.node()}-{platform.processor()}-{platform.machine()}"
+                return hashlib.sha256(data.encode()).hexdigest()[:16]
+            except:
+                # Ultimate fallback: generate and save locally
+                id_file = os.path.join(os.path.expanduser("~"), ".mindpalace_device_id")
+                if os.path.exists(id_file):
+                    with open(id_file, 'r') as f:
+                        return f.read().strip()
+                else:
+                    import uuid
+                    device_id = str(uuid.uuid4())
+                    with open(id_file, 'w') as f:
+                        f.write(device_id)
+                    return device_id
+    
+    def setup_repo(self):
+        """Initialize or clone the sync repository"""
+        if not self.repo_url:
+            return False, "No repository URL configured"
+        
+        # Ensure URL has https:// prefix
+        url = self.repo_url
+        if not url.startswith('https://') and not url.startswith('http://'):
+            url = 'https://' + url
+            print(f"🔧 Fixed URL: {url}")
+        
+        # Embed token in URL if provided
+        if self.token:
+            url = url.replace("https://", f"https://{self.token}@")
+            
+        if os.path.exists(self.repo_path):
+            try:
+                # Try to use GitPython first
+                self.repo = git.Repo(self.repo_path)
+                
+                # Check if it's valid by using subprocess instead of GitPython's fetch
+                import subprocess
+                result = subprocess.run(['git', 'fetch', '--dry-run'], cwd=self.repo_path, capture_output=True, text=True)
+                if result.returncode == 0:
+                    return True, "Repository ready"
+                else:
+                    # Try git pull
+                    result = subprocess.run(['git', 'pull'], cwd=self.repo_path, capture_output=True, text=True)
+                    if result.returncode == 0:
+                        return True, "Repository pulled successfully"
+                    else:
+                        raise Exception(result.stderr)
+            except Exception as e:
+                print(f"Error with repo: {e}")
+                # If corrupt, try re-cloning
+                import shutil
+                shutil.rmtree(self.repo_path)
+                return self.setup_repo()
+        else:
+            try:
+                os.makedirs(os.path.dirname(self.repo_path), exist_ok=True)
+                # Use subprocess to clone
+                import subprocess
+                print(f"🔄 Cloning from: {url[:50]}...")  # Show first 50 chars (hides token)
+                result = subprocess.run(['git', 'clone', url, self.repo_path], capture_output=True, text=True)
+                if result.returncode == 0:
+                    self.repo = git.Repo(self.repo_path)
+                    
+                    # Create .gitignore to ONLY sync data files (NOT code)
+                    gitignore_path = os.path.join(self.repo_path, '.gitignore')
+                    with open(gitignore_path, 'w') as f:
+                        f.write('''
+    # ============================================
+    # DATA-ONLY SYNC REPOSITORY
+    # This repo should ONLY contain data files
+    # Code is stored in a separate repository
+    # ============================================
+
+    # Ignore everything except sync_data.json and files/
+    *
+    !sync_data.json
+    !files/
+    !files/**
+
+    # Ignore IDE files
+    .idea/
+    .vscode/
+    *.swp
+    *.swo
+
+    # Ignore OS files
+    .DS_Store
+    Thumbs.db
+
+    # Ignore temporary files
+    *.tmp
+    *.temp
+    *.log
+    ''')
+                    
+                    # Add and commit .gitignore
+                    subprocess.run(['git', 'add', '.gitignore'], cwd=self.repo_path, capture_output=True, text=True)
+                    subprocess.run(['git', 'commit', '-m', 'Add .gitignore for data-only sync'], cwd=self.repo_path, capture_output=True, text=True)
+                    
+                    # Push the .gitignore
+                    result = subprocess.run(['git', 'push', '--set-upstream', 'origin', 'main'], cwd=self.repo_path, capture_output=True, text=True)
+                    if result.returncode != 0:
+                        # Try with master branch if main fails
+                        result = subprocess.run(['git', 'push', '--set-upstream', 'origin', 'master'], cwd=self.repo_path, capture_output=True, text=True)
+                        if result.returncode != 0:
+                            print(f"⚠️ Could not push .gitignore: {result.stderr}")
+                    
+                    return True, "Repository cloned successfully with data-only config"
+                else:
+                    error_msg = result.stderr
+                    print(f"❌ Clone failed: {error_msg}")
+                    return False, f"Clone failed: {error_msg}"
+            except Exception as e:
+                return False, f"Failed to clone: {str(e)}"
+                
+    def sync(self):
+        """Main sync method - push and pull all data"""
+        if not config.get("sync_enabled", False):
+            return False, "Sync is disabled in settings"
+            
+        self.sync_progress.emit("Starting sync...")
+        
+        # 1. Ensure repo is ready
+        success, msg = self.setup_repo()
+        if not success:
+            self.sync_completed.emit(False, msg)
+            return False, msg
+            
+        self.sync_progress.emit(msg)
+        
+        # 2. Pull latest changes from GitHub
+        self.sync_progress.emit("Pulling latest data from GitHub...")
+        try:
+            import subprocess
+            result = subprocess.run(['git', 'pull', '--rebase'], cwd=self.repo_path, capture_output=True, text=True)
+            if result.returncode != 0:
+                # If rebase fails, try a normal pull
+                self.sync_progress.emit("Rebase failed, trying normal pull...")
+                result = subprocess.run(['git', 'pull'], cwd=self.repo_path, capture_output=True, text=True)
+                if result.returncode != 0:
+                    error_msg = f"Pull failed: {result.stderr}"
+                    self.sync_completed.emit(False, error_msg)
+                    return False, error_msg
+        except Exception as e:
+            error_msg = f"Pull failed: {str(e)}"
+            self.sync_completed.emit(False, error_msg)
+            return False, error_msg
+        
+        # 3. Merge remote data into local DB
+        self.sync_progress.emit("Merging remote data...")
+        remote_data_path = os.path.join(self.repo_path, self.sync_data_file)
+        if os.path.exists(remote_data_path):
+            try:
+                with open(remote_data_path, 'r') as f:
+                    remote_data = json.load(f)
+                self.merge_remote_data(remote_data)
+            except Exception as e:
+                error_msg = f"Merge failed: {str(e)}"
+                self.sync_completed.emit(False, error_msg)
+                return False, error_msg
+        
+        # 4. Export local data to the repo
+        self.sync_progress.emit("Exporting local data...")
+        try:
+            local_data = self.export_local_data()
+            with open(os.path.join(self.repo_path, self.sync_data_file), 'w') as f:
+                json.dump(local_data, f, indent=2)
+        except Exception as e:
+            error_msg = f"Export failed: {str(e)}"
+            self.sync_completed.emit(False, error_msg)
+            return False, error_msg
+        
+        # 5. Handle file sharing
+        self.sync_progress.emit("Syncing files...")
+        try:
+            self.sync_files()
+        except Exception as e:
+            error_msg = f"File sync failed: {str(e)}"
+            self.sync_completed.emit(False, error_msg)
+            return False, error_msg
+        
+        # 6. Commit and push
+        self.sync_progress.emit("Pushing to GitHub...")
+        try:
+            import subprocess
+            result = subprocess.run(['git', 'status', '--porcelain'], cwd=self.repo_path, capture_output=True, text=True)
+            if result.stdout.strip():
+                subprocess.run(['git', 'add', '-A'], cwd=self.repo_path, capture_output=True, text=True)
+                commit_msg = f"Sync from {self.device_id} at {datetime.now().isoformat()}"
+                subprocess.run(['git', 'commit', '-m', commit_msg], cwd=self.repo_path, capture_output=True, text=True)
+                result = subprocess.run(['git', 'push'], cwd=self.repo_path, capture_output=True, text=True)
+                if result.returncode != 0:
+                    self.sync_progress.emit("Push failed, retrying after pull...")
+                    subprocess.run(['git', 'pull', '--rebase'], cwd=self.repo_path, capture_output=True, text=True)
+                    result = subprocess.run(['git', 'push'], cwd=self.repo_path, capture_output=True, text=True)
+                    if result.returncode != 0:
+                        error_msg = f"Push failed: {result.stderr}"
+                        self.sync_completed.emit(False, error_msg)
+                        return False, error_msg
+            else:
+                self.sync_progress.emit("No changes to sync")
+        except Exception as e:
+            error_msg = f"Push failed: {str(e)}"
+            self.sync_completed.emit(False, error_msg)
+            return False, error_msg
+        
+        self.sync_completed.emit(True, "Sync completed successfully")
+        self.sync_progress.emit("Sync completed!")
+        return True, "Sync completed successfully"
+    def merge_remote_data(self, remote_data):
+        """Merge remote data into local database - MERGE, NOT REPLACE"""
+        tables = remote_data.get("tables", {})
+        order = ["courses", "habits", "cascading_goals", "flashcards", "quizzes",
+                "notes", "focus_queue", "habit_logs", "pomodoro_sessions"]
+        
+        for table in order:
+            if table not in tables:
+                continue
+            rows = tables[table]
+            for row in rows:
+                uid = row.get("uuid")
+                if not uid:
+                    uid = uuid.uuid4().hex
+                    row["uuid"] = uid
+                
+                # Check if record exists locally by UUID
+                db.c.execute(f"SELECT id, modified_at FROM {table} WHERE uuid = ?", (uid,))
+                existing = db.c.fetchone()
+                
+                if existing:
+                    existing_id, existing_mod = existing
+                    incoming_mod = row.get("modified_at", "")
+                    # Only update if incoming is newer OR if local doesn't have modified_at
+                    if not existing_mod or (incoming_mod and incoming_mod > existing_mod):
+                        # Update ALL fields except id and uuid
+                        set_clause = ", ".join([f"{k} = ?" for k in row.keys() if k not in ["id", "uuid"]])
+                        values = [row[k] for k in row.keys() if k not in ["id", "uuid"]] + [existing_id]
+                        try:
+                            db.c.execute(f"UPDATE {table} SET {set_clause} WHERE id = ?", values)
+                            print(f"🔄 Updated {table} record {uid}")
+                        except sqlite3.IntegrityError as e:
+                            # Handle UNIQUE constraint violations
+                            if "UNIQUE constraint" in str(e):
+                                print(f"⚠️ Skipping {table} record {uid} - {e}")
+                            else:
+                                raise
+                    else:
+                        print(f"⏭️ Skipped {table} record {uid} (local is newer)")
+                else:
+                    # Insert new record - handle potential UNIQUE violations
+                    row.pop("id", None)
+                    cols = ", ".join(row.keys())
+                    placeholders = ", ".join(["?"] * len(row))
+                    try:
+                        db.c.execute(f"INSERT INTO {table} ({cols}) VALUES ({placeholders})", list(row.values()))
+                        print(f"➕ Added new {table} record {uid}")
+                    except sqlite3.IntegrityError as e:
+                        if "UNIQUE constraint" in str(e):
+                            print(f"⚠️ UNIQUE constraint violation for {table} - trying to handle gracefully")
+                            
+                            # Handle specific tables with UNIQUE constraints
+                            if table == "habits":
+                                # Try to find the habit by name and update it
+                                name = row.get("name")
+                                if name:
+                                    db.c.execute(f"SELECT id, modified_at FROM {table} WHERE name = ?", (name,))
+                                    existing = db.c.fetchone()
+                                    if existing:
+                                        existing_id, existing_mod = existing
+                                        incoming_mod = row.get("modified_at", "")
+                                        if not existing_mod or (incoming_mod and incoming_mod > existing_mod):
+                                            # Update all fields except id, uuid, and name (keep the name as is)
+                                            set_clause = ", ".join([f"{k} = ?" for k in row.keys() if k not in ["id", "uuid", "name"]])
+                                            values = [row[k] for k in row.keys() if k not in ["id", "uuid", "name"]] + [existing_id]
+                                            db.c.execute(f"UPDATE {table} SET {set_clause} WHERE id = ?", values)
+                                            print(f"🔄 Updated existing habit by name: {name}")
+                                        else:
+                                            print(f"⏭️ Skipped habit {name} (local is newer)")
+                                    else:
+                                        # If not found by name, try by uuid with a different approach
+                                        db.c.execute(f"SELECT id, modified_at FROM {table} WHERE uuid = ?", (uid,))
+                                        existing = db.c.fetchone()
+                                        if existing:
+                                            existing_id, existing_mod = existing
+                                            incoming_mod = row.get("modified_at", "")
+                                            if not existing_mod or (incoming_mod and incoming_mod > existing_mod):
+                                                set_clause = ", ".join([f"{k} = ?" for k in row.keys() if k not in ["id", "uuid"]])
+                                                values = [row[k] for k in row.keys() if k not in ["id", "uuid"]] + [existing_id]
+                                                db.c.execute(f"UPDATE {table} SET {set_clause} WHERE id = ?", values)
+                                                print(f"🔄 Updated existing habit by uuid: {uid}")
+                            elif table == "courses":
+                                # Handle duplicate course names
+                                name = row.get("name")
+                                if name:
+                                    db.c.execute(f"SELECT id, modified_at FROM {table} WHERE name = ?", (name,))
+                                    existing = db.c.fetchone()
+                                    if existing:
+                                        existing_id, existing_mod = existing
+                                        incoming_mod = row.get("modified_at", "")
+                                        if not existing_mod or (incoming_mod and incoming_mod > existing_mod):
+                                            set_clause = ", ".join([f"{k} = ?" for k in row.keys() if k not in ["id", "uuid", "name"]])
+                                            values = [row[k] for k in row.keys() if k not in ["id", "uuid", "name"]] + [existing_id]
+                                            db.c.execute(f"UPDATE {table} SET {set_clause} WHERE id = ?", values)
+                                            print(f"🔄 Updated existing course by name: {name}")
+                            else:
+                                # Generic fallback: try to find by name or title
+                                name_key = "name" if "name" in row else "title" if "title" in row else None
+                                if name_key:
+                                    value = row.get(name_key)
+                                    if value:
+                                        db.c.execute(f"SELECT id, modified_at FROM {table} WHERE {name_key} = ?", (value,))
+                                        existing = db.c.fetchone()
+                                        if existing:
+                                            existing_id, existing_mod = existing
+                                            incoming_mod = row.get("modified_at", "")
+                                            if not existing_mod or (incoming_mod and incoming_mod > existing_mod):
+                                                set_clause = ", ".join([f"{k} = ?" for k in row.keys() if k not in ["id", "uuid", name_key]])
+                                                values = [row[k] for k in row.keys() if k not in ["id", "uuid", name_key]] + [existing_id]
+                                                db.c.execute(f"UPDATE {table} SET {set_clause} WHERE id = ?", values)
+                                                print(f"🔄 Updated existing {table} by {name_key}: {value}")
+                        else:
+                            raise
+        
+        db.conn.commit()
+        print("✅ Merge completed successfully")
+    
+    def export_local_data(self):
+        """Export local data without sensitive info"""
+        # Get settings but remove any sensitive data
+        settings = config.cfg.copy()
+        settings.pop("sync_github_token", None)  # Remove token
+        
+        data = {
+            "device_id": self.device_id,
+            "last_sync": datetime.now().isoformat(),
+            "settings": settings,
+            "tables": {}
+        }
+        tables = ["courses", "pomodoro_sessions", "cascading_goals", "habits", "habit_logs",
+                "flashcards", "quizzes", "focus_queue", "notes"]
+        for table in tables:
+            db.c.execute(f"SELECT * FROM {table}")
+            columns = [desc[0] for desc in db.c.description]
+            rows = [dict(zip(columns, row)) for row in db.c.fetchall()]
+            data["tables"][table] = rows
+        return data
+    
+    def sync_files(self):
+        """Sync files from mapped folders"""
+        local_paths = config.get("sync_local_paths", [])
+        if not local_paths:
+            return
+            
+        device_files_dir = os.path.join(self.repo_path, self.files_dir, self.device_id)
+        os.makedirs(device_files_dir, exist_ok=True)
+        
+        for local_path in local_paths:
+            if not os.path.exists(local_path):
+                continue
+            # Copy files to the repo
+            for item in os.listdir(local_path):
+                src = os.path.join(local_path, item)
+                dst = os.path.join(device_files_dir, item)
+                if os.path.isfile(src):
+                    shutil.copy2(src, dst)
+                elif os.path.isdir(src):
+                    shutil.copytree(src, dst, dirs_exist_ok=True)
+    
+    def map_folder(self, local_path):
+        """Add a folder to be monitored and synced"""
+        paths = config.get("sync_local_paths", [])
+        if local_path not in paths:
+            paths.append(local_path)
+            config.set("sync_local_paths", paths)
+    
+    def unmap_folder(self, local_path):
+        """Remove a folder from sync"""
+        paths = config.get("sync_local_paths", [])
+        if local_path in paths:
+            paths.remove(local_path)
+            config.set("sync_local_paths", paths)
+
+
+
+
 
 
 def get_html_content():
@@ -1241,25 +2151,33 @@ def get_html_content():
             );
         };
 
-        const GlobalTargets = () => (
-            <div className="p-4 h-full flex flex-col items-center justify-center text-center w-full">
-                <h3 className="text-gray-300 font-bold uppercase tracking-widest text-[11px] mb-6">Global Progress</h3>
-                <div className="w-32 h-32 sm:w-40 sm:h-40 rounded-full border-[8px] border-black/40 relative flex items-center justify-center shadow-inner">
-                    <div className="absolute inset-0 border-[8px] border-blue-500 rounded-full border-t-transparent border-r-transparent transform -rotate-45 opacity-80 shadow-[0_0_15px_rgba(59,130,246,0.6)]"></div>
-                    <div className="flex flex-col items-center z-10">
-                        <span className="text-3xl font-bold text-white drop-shadow-lg">65%</span>
-                        <span className="text-[10px] text-gray-400 mt-1 font-mono tracking-wider">32.5 / 50.0 Hrs</span>
+        const GlobalTargets = ({ metrics }) => {
+            // Calculate actual progress from metrics
+            const totalHours = metrics?.total_study_hours || 0;
+            const targetHours = 50; // This could be made configurable
+            const progress = targetHours > 0 ? Math.min((totalHours / targetHours) * 100, 100) : 0;
+            
+            return (
+                <div className="p-4 h-full flex flex-col items-center justify-center text-center w-full">
+                    <h3 className="text-gray-300 font-bold uppercase tracking-widest text-[11px] mb-6">Global Progress</h3>
+                    <div className="w-32 h-32 sm:w-40 sm:h-40 rounded-full border-[8px] border-black/40 relative flex items-center justify-center shadow-inner">
+                        <div className="absolute inset-0 border-[8px] border-blue-500 rounded-full border-t-transparent border-r-transparent opacity-80 shadow-[0_0_15px_rgba(59,130,246,0.6)]" 
+                            style={{ transform: `rotate(${-45 + (progress / 100) * 360}deg)` }}></div>
+                        <div className="flex flex-col items-center z-10">
+                            <span className="text-3xl font-bold text-white drop-shadow-lg">{Math.round(progress)}%</span>
+                            <span className="text-[10px] text-gray-400 mt-1 font-mono tracking-wider">{totalHours.toFixed(1)} / {targetHours} Hrs</span>
+                        </div>
+                    </div>
+                    <div className="mt-6 text-[11px] text-green-400 font-bold bg-green-900/30 px-4 py-1.5 rounded-full border border-green-500/30">
+                        <i className="fas fa-satellite-dish mr-1"></i> {metrics ? `${Math.round(progress)}% Complete` : 'No Data'}
                     </div>
                 </div>
-                <div className="mt-6 text-[11px] text-green-400 font-bold bg-green-900/30 px-4 py-1.5 rounded-full border border-green-500/30">
-                    <i className="fas fa-satellite-dish mr-1"></i> Data Synced
-                </div>
-            </div>
-        );
+            );
+        };
 
         const MetricsWidget = ({ metrics }) => {
             const hVol = metrics && metrics.hourly_vol ? metrics.hourly_vol : [10, 20, 5, 40, 80, 60, 30, 90, 100, 50, 20, 10];
-            const maxVol = Math.max(...hVol, 1); // Avoid division by zero
+            const maxVol = Math.max(...hVol, 1);
             return (
                 <div className="p-4 h-full flex flex-col w-full">
                     <h3 className="text-gray-300 font-bold uppercase tracking-widest text-sm border-b border-white/10 pb-2 mb-4 w-full text-left">Study Volume by Hour (08:00 - 20:00)</h3>
@@ -1323,7 +2241,7 @@ def get_html_content():
                         </div>
                     );
                     case 'Calendar': return <DualCalendar backend={backend} />;
-                    case 'GlobalTargets': return <GlobalTargets />;
+                    case 'GlobalTargets': return <GlobalTargets metrics={metrics} />;
                     case 'GitHubMatrix': return <NativeGitHubMatrix heatmap={heatmap} />;
                     case 'HabitsWidget': return <DashboardHabitWidget habits={habits} habitLogs={habitLogs} />;
                     case 'MetricsWidget': return <MetricsWidget metrics={metrics} />;
@@ -1375,12 +2293,61 @@ def get_html_content():
         };
 
         // --- ALL OTHER VIEWS ---
-        const ProductivityHubView = ({ backend, timerState, camFeed, flatGoals, queue, refreshQueue }) => {
+            const ProductivityHubView = ({ backend, timerState, camFeed, flatGoals, queue, refreshQueue, settings }) => {
             const [dur, setDur] = useState(25);
             const [crs, setCrs] = useState("");
             const [type, setType] = useState("Work");
             const [editingId, setEditingId] = useState(null);
             const [activeTab, setActiveTab] = useState("timeline");
+            const [showProcessList, setShowProcessList] = useState(false);
+            const [selectedProcesses, setSelectedProcesses] = useState([]);
+
+            const startFocusSession = () => {
+                if (!backend) return;
+                
+                // Get running processes first
+                if (settings && settings.app_monitoring_enabled) {
+                    backend.request(JSON.stringify({action: 'get_processes'})).then(res => {
+                        const data = JSON.parse(res);
+                        setSelectedProcesses(data.processes || []);
+                        setShowProcessList(true);
+                    });
+                } else {
+                    // Start timer directly if app monitoring is disabled
+                    backend.request(JSON.stringify({action: 'start_timer', duration: dur, course: crs || "General"}));
+                }
+            };
+
+            // Add this modal before the main content
+            {showProcessList && (
+                <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 backdrop-blur-md">
+                    <div className="glass-panel p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+                        <h3 className="text-white font-bold text-xl mb-4">📋 Running Applications</h3>
+                        <p className="text-gray-400 text-sm mb-4">
+                            The following apps are currently running. They will be monitored during your focus session.
+                        </p>
+                        <div className="flex flex-col gap-1 mb-4 max-h-60 overflow-y-auto">
+                            {selectedProcesses.map((p, i) => (
+                                <div key={i} className="flex items-center justify-between p-2 bg-white/5 rounded border border-white/10 text-sm">
+                                    <span className="text-gray-300">{p.name}</span>
+                                    <span className="text-gray-500 text-xs">PID: {p.pid}</span>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="flex gap-3">
+                            <button onClick={() => {
+                                setShowProcessList(false);
+                                backend.request(JSON.stringify({action: 'start_timer', duration: dur, course: crs || "General"}));
+                            }} className="glass-button px-6 py-2 rounded text-xs font-bold tracking-widest text-white uppercase bg-green-600/50 border-green-500/50 hover:bg-green-600">
+                                <i className="fas fa-play mr-2"></i> Start Session
+                            </button>
+                            <button onClick={() => setShowProcessList(false)} className="glass-button px-6 py-2 rounded text-xs font-bold tracking-widest text-gray-300 uppercase border-white/10 hover:bg-white/5">
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             const getTaskColor = (courseName, isBreak) => {
                 if (isBreak) return 'rgba(100, 100, 100, 0.8)';
@@ -1411,7 +2378,6 @@ def get_html_content():
                         <h2 className="text-2xl font-serif font-bold text-white tracking-widest uppercase drop-shadow-md">Focus Hub</h2>
                     </div>
 
-                    {/* Tabs */}
                     <div className="flex gap-6 border-b border-white/10 mb-6 shrink-0">
                         <button onClick={() => setActiveTab('timeline')} className={`pb-2 text-xs font-bold uppercase tracking-widest transition-all ${activeTab === 'timeline' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-500 hover:text-gray-300'}`}>Timeline & Queue</button>
                         <button onClick={() => setActiveTab('vision')} className={`pb-2 text-xs font-bold uppercase tracking-widest transition-all ${activeTab === 'vision' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-500 hover:text-gray-300'}`}>Vision Tracker</button>
@@ -1419,7 +2385,6 @@ def get_html_content():
 
                     {activeTab === 'timeline' && (
                         <div className="flex flex-col flex-grow overflow-hidden">
-                            {/* Control Bar */}
                             <div className="flex flex-wrap items-center gap-3 mb-4 w-full glass-panel p-3 shrink-0 bg-black/40">
                                 <select className="glass-input px-3 py-1.5 rounded text-xs font-bold uppercase w-48" value={crs} onChange={e => setCrs(e.target.value)}>
                                     <option value="">General</option>
@@ -1438,10 +2403,7 @@ def get_html_content():
                                 <button onClick={() => handleAction('clear')} className="glass-button px-5 py-1.5 rounded text-[11px] font-bold text-red-300 uppercase ml-auto">Clear All</button>
                             </div>
 
-                            {/* Main Timeline Panel */}
                             <div className="glass-panel flex-grow rounded-xl relative p-6 flex flex-col gap-6 overflow-hidden bg-black/20">
-                                
-                                {/* Queue List (Full Width) */}
                                 <div className="flex-grow rounded-lg overflow-y-auto">
                                     <div className="flex flex-col gap-1.5">
                                         {timerState.is_running && (
@@ -1462,7 +2424,6 @@ def get_html_content():
                                     </div>
                                 </div>
 
-                                {/* Full Width Timeline Bar */}
                                 <div className="w-full flex flex-col shrink-0 mt-2">
                                     <div className="w-full h-8 bg-black/60 rounded-md flex overflow-hidden border border-white/10 relative gap-1 p-1">
                                         {timerState.is_running && (
@@ -1479,7 +2440,6 @@ def get_html_content():
                                     </div>
                                 </div>
 
-                                {/* Bottom Controls (Timer & Buttons) */}
                                 <div className="flex justify-between items-end mt-4 shrink-0">
                                     <div className={`text-6xl font-mono font-bold tracking-widest drop-shadow-lg ${timerState.is_running ? 'text-white' : 'text-gray-300'}`}>
                                         {timerState.time_str || "25:00"}
@@ -1919,7 +2879,6 @@ def get_html_content():
                     </div>
                     <div className="flex flex-col md:flex-row gap-4 flex-grow overflow-hidden">
                         
-                        {/* Library Panel */}
                         <div className="w-full md:w-1/4 glass-panel p-4 flex flex-col gap-2 overflow-y-auto">
                             <button onClick={newNote} className="glass-button w-full py-2 rounded text-[11px] font-bold tracking-widest text-green-300 uppercase shadow-lg mb-2 border border-green-500/30">+ New Note</button>
                             {notes && notes.map(n => (
@@ -1934,7 +2893,6 @@ def get_html_content():
                             ))}
                         </div>
 
-                        {/* Editor Panel */}
                         <div className="w-full md:w-1/2 glass-panel p-0 flex flex-col overflow-hidden">
                             <div className="flex flex-col gap-2 p-3 border-b border-white/10 bg-black/40 text-xs font-mono text-gray-400 shrink-0">
                                 <div className="flex flex-wrap gap-2">
@@ -1955,7 +2913,6 @@ def get_html_content():
                             <textarea className="w-full flex-grow bg-transparent text-gray-200 p-4 outline-none resize-none font-mono text-sm leading-relaxed custom-scrollbar" value={content} onChange={e=>setContent(e.target.value)} placeholder="Type markdown here..."></textarea>
                         </div>
 
-                        {/* Preview Panel */}
                         <div className="w-full md:w-1/4 glass-panel-darker p-0 flex flex-col overflow-hidden">
                             <div className="p-2 border-b border-white/10 bg-black/60 text-xs font-mono text-gray-400 shrink-0 font-bold tracking-widest uppercase">Live Preview</div>
                             <div className="w-full flex-grow p-6 overflow-y-auto text-gray-200 prose prose-invert max-w-none custom-scrollbar" dangerouslySetInnerHTML={{__html: marked.parse(content || "*Nothing to preview.*")}}></div>
@@ -1969,12 +2926,11 @@ def get_html_content():
             const handleChange = (k, v) => setSettings(prev => ({...prev, [k]: v}));
             const saveSettings = () => backend.request(JSON.stringify({action: 'save_settings', data: settings}));
             const openFileDialog = (key) => { backend.request(JSON.stringify({action: 'open_file_dialog'})).then(res => { const data = JSON.parse(res); if(data.path) handleChange(key, data.path); }); };
-            
+            const [showProcessModal, setShowProcessModal] = useState(false);
             const [confirmReset, setConfirmReset] = useState(false);
             const handleReset = () => {
                 backend.request(JSON.stringify({action: 'reset_data'})).then(() => {
                     setConfirmReset(false);
-                    // trigger quick refresh via app reload/reload
                 });
             };
 
@@ -1999,9 +2955,398 @@ def get_html_content():
                     </div>
                     <div className="glass-panel p-6 flex-grow overflow-y-auto custom-scrollbar">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 max-w-4xl">
+{/* App Monitoring */}
+<div className="md:col-span-2 text-blue-400 font-bold uppercase tracking-widest text-xs border-b border-white/10 pb-1 mt-4">App Monitoring</div>
+
+<div className="md:col-span-2 flex flex-col gap-3">
+    <div className="flex items-center gap-4">
+        <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">Enable App Monitoring</label>
+        <input type="checkbox" checked={settings.app_monitoring_enabled || false} 
+               onChange={e => {
+                   const checked = e.target.checked;
+                   handleChange('app_monitoring_enabled', checked);
+                   backend.request(JSON.stringify({action: 'set_app_monitoring', enabled: checked}));
+               }} 
+               className="w-5 h-5 rounded bg-black/40 border border-white/20 accent-blue-500" />
+    </div>
+    
+    <div className="flex items-center gap-4">
+        <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">Auto-Block Disallowed Apps</label>
+        <input type="checkbox" checked={settings.auto_block || false} 
+               onChange={e => {
+                   const checked = e.target.checked;
+                   handleChange('auto_block', checked);
+                   backend.request(JSON.stringify({action: 'set_auto_block', enabled: checked}));
+               }} 
+               className="w-5 h-5 rounded bg-black/40 border border-white/20 accent-red-500" />
+    </div>
+    
+    <div className="flex gap-3 mt-2">
+        <button onClick={() => {
+            backend.request(JSON.stringify({action: 'get_processes'})).then(res => {
+                const data = JSON.parse(res);
+                if (data.processes && data.processes.length > 0) {
+                    setSettings(prev => ({...prev, process_list: data.processes}));
+                    setShowProcessModal(true);
+                } else {
+                    alert('No processes found.\n\nInstall psutil for better monitoring:\npip install psutil');
+                }
+            });
+        }} className="glass-button px-6 py-2 rounded text-xs font-bold tracking-widest text-white uppercase bg-green-600/30 border-green-500/50 hover:bg-green-600">
+            <i className="fas fa-sync mr-2"></i> Refresh Process List
+        </button>
+        <button onClick={() => {
+            backend.request(JSON.stringify({action: 'check_current_distractions'})).then(res => {
+                const data = JSON.parse(res);
+                if (data.distractions && data.distractions.length > 0) {
+                    let msg = '⚠️ Distracting Apps Found:\n\n';
+                    data.distractions.forEach((p, i) => {
+                        msg += `${i+1}. ${p.name} (PID: ${p.pid})\n`;
+                    });
+                    alert(msg);
+                } else {
+                    alert('✅ No distracting apps found!');
+                }
+            });
+        }} className="glass-button px-6 py-2 rounded text-xs font-bold tracking-widest text-white uppercase bg-blue-600/30 border-blue-500/50 hover:bg-blue-600">
+            <i className="fas fa-search mr-2"></i> Check Distractions
+        </button>
+    </div>
+    
+    {/* Current allowed/blocked lists display */}
+    <div className="flex gap-6 mt-2">
+        <div className="flex-1">
+            <label className="text-[10px] font-bold text-green-400 uppercase tracking-widest">Allowed Apps ({settings.allowed_apps?.length || 0})</label>
+            <div className="flex flex-wrap gap-1 mt-1 max-h-20 overflow-y-auto">
+                {settings.allowed_apps && settings.allowed_apps.length > 0 ? (
+                    settings.allowed_apps.map((app, i) => (
+                        <span key={i} className="text-xs bg-green-900/30 text-green-400 px-2 py-0.5 rounded border border-green-500/30 flex items-center gap-1">
+                            {app}
+                            <button onClick={() => {
+                                const newList = settings.allowed_apps.filter((_, idx) => idx !== i);
+                                handleChange('allowed_apps', newList);
+                                backend.request(JSON.stringify({action: 'set_allowed_apps', apps: newList}));
+                            }} className="text-red-400 hover:text-red-300">
+                                <i className="fas fa-times text-[8px]"></i>
+                            </button>
+                        </span>
+                    ))
+                ) : (
+                    <span className="text-xs text-gray-500 italic">No allowed apps configured</span>
+                )}
+            </div>
+        </div>
+        <div className="flex-1">
+            <label className="text-[10px] font-bold text-red-400 uppercase tracking-widest">Blocked Apps ({settings.blocked_apps?.length || 0})</label>
+            <div className="flex flex-wrap gap-1 mt-1 max-h-20 overflow-y-auto">
+                {settings.blocked_apps && settings.blocked_apps.length > 0 ? (
+                    settings.blocked_apps.map((app, i) => (
+                        <span key={i} className="text-xs bg-red-900/30 text-red-400 px-2 py-0.5 rounded border border-red-500/30 flex items-center gap-1">
+                            {app}
+                            <button onClick={() => {
+                                const newList = settings.blocked_apps.filter((_, idx) => idx !== i);
+                                handleChange('blocked_apps', newList);
+                                backend.request(JSON.stringify({action: 'set_blocked_apps', apps: newList}));
+                            }} className="text-red-400 hover:text-red-300">
+                                <i className="fas fa-times text-[8px]"></i>
+                            </button>
+                        </span>
+                    ))
+                ) : (
+                    <span className="text-xs text-gray-500 italic">No blocked apps configured</span>
+                )}
+            </div>
+        </div>
+    </div>
+    
+    <div className="text-[10px] text-gray-500 mt-1">
+        <i className="fas fa-info-circle mr-1"></i> 
+        {settings.app_monitoring_enabled ? 
+            '✅ App monitoring is active. Disallowed apps will trigger distractions.' : 
+            '❌ App monitoring is disabled. Enable it above to start monitoring.'}
+    </div>
+</div>
+
+{/* Process Selection Modal */}
+{showProcessModal && (
+    <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 backdrop-blur-md">
+        <div className="glass-panel p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+                <h3 className="text-white font-bold text-xl">📋 Running Applications</h3>
+                <button onClick={() => setShowProcessModal(false)} className="text-gray-400 hover:text-white">
+                    <i className="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            
+            <div className="flex gap-3 mb-4">
+                <button onClick={() => {
+                    const allChecked = document.querySelectorAll('.process-checkbox');
+                    allChecked.forEach(cb => cb.checked = true);
+                }} className="glass-button px-3 py-1 rounded text-xs font-bold text-green-300 uppercase">
+                    Select All
+                </button>
+                <button onClick={() => {
+                    const allChecked = document.querySelectorAll('.process-checkbox');
+                    allChecked.forEach(cb => cb.checked = false);
+                }} className="glass-button px-3 py-1 rounded text-xs font-bold text-red-300 uppercase">
+                    Deselect All
+                </button>
+                <button onClick={() => {
+                    const checkedBoxes = document.querySelectorAll('.process-checkbox:checked');
+                    const selectedApps = [];
+                    checkedBoxes.forEach(cb => {
+                        const appName = cb.getAttribute('data-app');
+                        const action = document.querySelector(`[data-action="${appName}"]`).value;
+                        if (action === 'allow') {
+                            const current = settings.allowed_apps || [];
+                            if (!current.includes(appName)) {
+                                handleChange('allowed_apps', [...current, appName]);
+                                backend.request(JSON.stringify({action: 'set_allowed_apps', apps: [...current, appName]}));
+                            }
+                        } else if (action === 'block') {
+                            const current = settings.blocked_apps || [];
+                            if (!current.includes(appName)) {
+                                handleChange('blocked_apps', [...current, appName]);
+                                backend.request(JSON.stringify({action: 'set_blocked_apps', apps: [...current, appName]}));
+                            }
+                        }
+                    });
+                    setShowProcessModal(false);
+                    alert('✅ App rules updated!');
+                }} className="glass-button px-4 py-2 rounded text-xs font-bold tracking-widest text-white uppercase bg-blue-600/30 border-blue-500/50 hover:bg-blue-600">
+                    Apply Rules
+                </button>
+            </div>
+            
+            <div className="flex flex-col gap-1 max-h-60 overflow-y-auto">
+                {settings.process_list && settings.process_list.map((p, i) => {
+                    const isAllowed = settings.allowed_apps?.includes(p.name);
+                    const isBlocked = settings.blocked_apps?.includes(p.name);
+                    return (
+                        <div key={i} className="flex items-center gap-3 p-2 bg-white/5 rounded border border-white/10 hover:bg-white/10 transition">
+                            <input type="checkbox" className="process-checkbox" data-app={p.name} 
+                                   defaultChecked={isAllowed || isBlocked} />
+                            <span className="text-sm text-gray-300 flex-grow">{p.name}</span>
+                            <span className="text-[10px] text-gray-500">PID: {p.pid}</span>
+                            <select data-action={p.name} className="glass-input text-xs px-2 py-1 rounded w-24" defaultValue={isAllowed ? 'allow' : isBlocked ? 'block' : 'ignore'}>
+                                <option value="ignore">Ignore</option>
+                                <option value="allow">✅ Allow</option>
+                                <option value="block">🚫 Block</option>
+                            </select>
+                            {isAllowed && <span className="text-xs text-green-400">✅</span>}
+                            {isBlocked && <span className="text-xs text-red-400">🚫</span>}
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    </div>
+)}
+
+
+{/* Git Sync Status */}
+<div className="md:col-span-2 text-blue-400 font-bold uppercase tracking-widest text-xs border-b border-white/10 pb-1">Git Sync Status</div>
+
+<div className="md:col-span-2 flex flex-col gap-3">
+    <div className="flex items-center gap-4">
+        <div className={`w-3 h-3 rounded-full ${settings.git_status === 'connected' ? 'bg-green-500 animate-pulse' : 
+                                              settings.git_status === 'error' ? 'bg-red-500' : 
+                                              settings.git_status === 'syncing' ? 'bg-yellow-500 animate-pulse' : 
+                                              'bg-gray-500'}`}>
+        </div>
+        <span className="text-sm font-medium text-gray-300">
+            {settings.git_status === 'connected' ? '✅ Connected to GitHub' :
+             settings.git_status === 'syncing' ? '🔄 Syncing...' :
+             settings.git_status === 'error' ? '❌ Sync Error' :
+             '⏸️ Not Connected'}
+        </span>
+        <span className="text-xs text-gray-500">
+            {settings.git_last_sync ? `Last sync: ${settings.git_last_sync}` : 'Never synced'}
+        </span>
+    </div>
+    
+    <div className="flex gap-3">
+        <button onClick={() => {
+            setSettings(prev => ({...prev, git_status: 'syncing'}));
+            backend.request(JSON.stringify({action: 'get_sync_status'})).then(res => {
+                const data = JSON.parse(res);
+                setSettings(prev => ({
+                    ...prev, 
+                    git_status: data.enabled ? 'connected' : 'error',
+                    git_last_sync: new Date().toLocaleString()
+                }));
+            }).catch(() => {
+                setSettings(prev => ({...prev, git_status: 'error'}));
+            });
+        }} className="glass-button px-4 py-2 rounded text-xs font-bold tracking-widest text-white uppercase bg-blue-600/30 border-blue-500/50 hover:bg-blue-600">
+            <i className="fas fa-sync mr-2"></i> Refresh Status
+        </button>
+<button onClick={() => {
+    backend.request(JSON.stringify({action: 'sync_now'})).then(res => {
+        const data = JSON.parse(res);
+        if (data.status === 'started') {
+            alert('🔄 Sync started... Check terminal for progress');
+        } else {
+            alert('❌ Failed to start sync: ' + (data.message || 'Unknown error'));
+        }
+    }).catch(err => {
+        alert('❌ Error: ' + err);
+    });
+}} className="glass-button px-6 py-2 rounded text-xs font-bold tracking-widest text-white uppercase bg-blue-600/30 border-blue-500/50 hover:bg-blue-600">
+    <i className="fas fa-sync mr-2"></i> Sync Now
+</button>
+    </div>
+    
+    <div className="flex flex-col gap-1 text-[10px] text-gray-500">
+        <div><span className="font-bold">Device ID:</span> {settings.device_id || 'Not set'}</div>
+        <div><span className="font-bold">Repository:</span> {settings.sync_repo_url ? settings.sync_repo_url.split('/').slice(-2).join('/') : 'Not configured'}</div>
+        {settings.git_status === 'connected' && (
+            <div className="text-green-400">✓ GitHub connection verified</div>
+        )}
+    </div>
+</div>
+                            {/* File & Device Sync */}
+                            <div className="md:col-span-2 text-blue-400 font-bold uppercase tracking-widest text-xs border-b border-white/10 pb-1">File & Device Sync</div>
                             
+                            <div className="md:col-span-2 flex flex-col gap-3">
+                                <div className="flex items-center gap-4">
+                                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">Device ID</label>
+                                    <span className="text-xs font-mono text-blue-400 bg-black/40 px-3 py-1 rounded border border-white/10">{settings.device_id || 'Loading...'}</span>
+                                </div>
+                                
+                                <div className="flex items-center gap-4">
+                                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">Enable Sync</label>
+                                    <input type="checkbox" checked={settings.sync_enabled || false} 
+                                           onChange={e => handleChange('sync_enabled', e.target.checked)} 
+                                           className="w-5 h-5 rounded bg-black/40 border border-white/20 accent-blue-500" />
+                                </div>
+                                
+                                <div className="flex flex-col gap-1">
+                                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">GitHub Repository URL</label>
+                                    <input type="text" value={settings.sync_repo_url || ''} 
+                                           onChange={e => handleChange('sync_repo_url', e.target.value)} 
+                                           className="glass-input p-2.5 rounded text-sm w-full" 
+                                           placeholder="https://github.com/username/repo.git" />
+                                </div>
+                                
+<div className="flex flex-col gap-1">
+    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">GitHub Token Status</label>
+    <div className="flex items-center gap-3 p-2 bg-black/40 rounded border border-white/10">
+        {settings.has_token ? (
+            <span className="text-green-400">
+                <i className="fas fa-check-circle mr-2"></i> ✅ Token configured in environment
+            </span>
+        ) : (
+            <span className="text-yellow-400">
+                <i className="fas fa-exclamation-triangle mr-2"></i> ⚠️ Token not set. Add GITHUB_TOKEN to .env file
+            </span>
+        )}
+        <button onClick={() => {
+            alert(`To set your GitHub token:\n\n1. Create a .env file in the project folder\n2. Add: GITHUB_TOKEN=your_token_here\n3. Restart the app\n\nGenerate token at: https://github.com/settings/tokens\nScope required: repo`);
+        }} className="glass-button px-3 py-1 rounded text-xs text-gray-400 hover:text-white">
+            <i className="fas fa-question-circle"></i>
+        </button>
+    </div>
+    <div className="text-[10px] text-gray-500">
+        <i className="fas fa-info-circle mr-1"></i> 
+        Token is stored in .env file (not committed to Git)
+    </div>
+</div>
+                                
+                                <div className="flex flex-col gap-1">
+                                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">Sync Interval (seconds)</label>
+                                    <input type="number" value={settings.sync_interval || 3600} 
+                                           onChange={e => handleChange('sync_interval', parseInt(e.target.value))} 
+                                           className="glass-input p-2.5 rounded text-sm w-32" />
+                                </div>
+                            </div>
+                            
+                            {/* Mapped Folders */}
+                            <div className="md:col-span-2 flex flex-col gap-2">
+                                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">Mapped Folders (Sync & Share)</label>
+                                
+                                <div className="flex gap-2">
+                                    <input type="text" id="folder-input" placeholder="C:/Users/... or /Users/..." 
+                                           className="glass-input p-2.5 rounded text-sm flex-grow" />
+                                    <button onClick={() => {
+                                        const input = document.getElementById('folder-input');
+                                        if (input.value) {
+                                            backend.request(JSON.stringify({action: 'map_folder', path: input.value})).then(() => {
+                                                input.value = '';
+                                                backend.request(JSON.stringify({action: 'get_mapped_folders'})).then(res => {
+                                                    const folders = JSON.parse(res);
+                                                    setSettings(prev => ({...prev, mapped_folders: folders.folders}));
+                                                });
+                                            });
+                                        }
+                                    }} className="glass-button px-4 py-2 rounded text-xs font-bold text-green-300 uppercase border border-green-500/30 hover:bg-green-900/30">
+                                        <i className="fas fa-plus mr-1"></i> Add
+                                    </button>
+                                    <button onClick={() => {
+                                        backend.request(JSON.stringify({action: 'open_folder_dialog'})).then(res => {
+                                            const data = JSON.parse(res);
+                                            if (data.path) {
+                                                document.getElementById('folder-input').value = data.path;
+                                            }
+                                        });
+                                    }} className="glass-button px-4 py-2 rounded text-xs font-bold text-blue-300 uppercase border border-blue-500/30 hover:bg-blue-900/30">
+                                        <i className="fas fa-folder-open mr-1"></i> Browse
+                                    </button>
+                                </div>
+                                
+                                <div className="flex flex-wrap gap-2 mt-2 max-h-40 overflow-y-auto p-2 bg-black/20 rounded-lg border border-white/5">
+                                    {settings.mapped_folders && settings.mapped_folders.length > 0 ? (
+                                        settings.mapped_folders.map((path, i) => (
+                                            <span key={i} className="flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-full text-xs border border-white/10 group hover:bg-white/20 transition-all">
+                                                <i className="fas fa-folder text-yellow-400 text-xs"></i>
+                                                <span className="font-mono text-gray-300 truncate max-w-xs" title={path}>{path}</span>
+                                                <button onClick={() => {
+                                                    backend.request(JSON.stringify({action: 'unmap_folder', path: path})).then(() => {
+                                                        setSettings(prev => ({
+                                                            ...prev, 
+                                                            mapped_folders: prev.mapped_folders.filter(p => p !== path)
+                                                        }));
+                                                    });
+                                                }} className="text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100 transition-all">
+                                                    <i className="fas fa-times"></i>
+                                                </button>
+                                            </span>
+                                        ))
+                                    ) : (
+                                        <span className="text-xs text-gray-500 italic">No folders mapped. Add a folder to sync across devices.</span>
+                                    )}
+                                </div>
+                                <div className="text-[10px] text-gray-500 mt-1">
+                                    <i className="fas fa-info-circle mr-1"></i> 
+                                    Files in mapped folders will be synced to all devices via GitHub
+                                </div>
+                            </div>
+                            
+                            {/* Sync Buttons */}
+                            <div className="md:col-span-2 flex gap-3 mt-2">
+                                <button onClick={() => backend.request(JSON.stringify({action: 'sync_now'}))}
+                                    className="glass-button px-6 py-2 rounded text-xs font-bold tracking-widest text-white uppercase bg-blue-600/30 border-blue-500/50 hover:bg-blue-600">
+                                    <i className="fas fa-sync mr-2"></i> Sync Now
+                                </button>
+                                <button onClick={() => backend.request(JSON.stringify({action: 'get_sync_status'})).then(res => {
+                                    const data = JSON.parse(res);
+                                    alert(`Sync Status:\nEnabled: ${data.enabled}\nDevice: ${data.device_id}\nInterval: ${data.interval}s`);
+                                })}
+                                    className="glass-button px-6 py-2 rounded text-xs font-bold tracking-widest text-gray-300 uppercase border-white/10 hover:bg-white/5">
+                                    <i className="fas fa-info-circle mr-2"></i> Status
+                                </button>
+                                <button onClick={() => backend.request(JSON.stringify({action: 'export_data'}))}
+                                    className="glass-button px-4 py-2 rounded text-[10px] font-bold tracking-widest uppercase bg-green-900/30 text-green-400 border border-green-500/30 hover:bg-green-900/60">
+                                    <i className="fas fa-file-export mr-2"></i> Export
+                                </button>
+                                <button onClick={() => backend.request(JSON.stringify({action: 'import_data'}))}
+                                    className="glass-button px-4 py-2 rounded text-[10px] font-bold tracking-widest uppercase bg-yellow-900/30 text-yellow-400 border border-yellow-500/30 hover:bg-yellow-900/60">
+                                    <i className="fas fa-file-import mr-2"></i> Import
+                                </button>
+                            </div>
+
                             {/* Visual Engine Settings */}
-                            <div className="md:col-span-2 text-blue-400 font-bold uppercase tracking-widest text-xs border-b border-white/10 pb-1">Visual Engine & Theme</div>
+                            <div className="md:col-span-2 text-blue-400 font-bold uppercase tracking-widest text-xs border-b border-white/10 pb-1 mt-4">Visual Engine & Theme</div>
                             <div className="flex flex-col gap-1">
                                 <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Background Image URL / Path</label>
                                 <div className="flex gap-2">
@@ -2039,15 +3384,50 @@ def get_html_content():
                                 <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Hands Style</label>
                                 <select className="glass-input p-2.5 rounded text-sm" value={settings.clock_hands || 'Classic'} onChange={e => handleChange('clock_hands', e.target.value)}><option>Classic</option><option>Spade</option><option>Breguet</option><option>Dauphine</option><option>Serpentine</option><option>Mercedes</option><option>Sword</option><option>Arrow</option></select>
                             </div>
-                            <div className="flex gap-4 items-center">
-                                <button onClick={() => backend.request(JSON.stringify({action: 'import_data'}))}
-                                    className="glass-button px-4 py-2 rounded text-[10px] font-bold tracking-widest uppercase bg-yellow-900/30 text-yellow-400 border border-yellow-500/30 hover:bg-yellow-900/60">
-                                    <i className="fas fa-file-import mr-2"></i> Import
-                                </button>
-                                {/* existing Reset button etc. */}
-                            </div>
+
                             {/* System Behavior */}
                             <div className="md:col-span-2 text-blue-400 font-bold uppercase tracking-widest text-xs border-b border-white/10 pb-1 mt-4">System & Behavior</div>
+                            {/* Quiet Mode */}
+<div className="md:col-span-2 text-blue-400 font-bold uppercase tracking-widest text-xs border-b border-white/10 pb-1 mt-4">Work Mode</div>
+
+<div className="md:col-span-2 flex flex-col gap-3">
+    <div className="flex items-center gap-4">
+        <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">Quiet Mode</label>
+        <input type="checkbox" checked={settings.quiet_mode || false} 
+               onChange={e => {
+                   const checked = e.target.checked;
+                   handleChange('quiet_mode', checked);
+                   backend.request(JSON.stringify({action: 'set_quiet_mode', enabled: checked}));
+               }} 
+               className="w-5 h-5 rounded bg-black/40 border border-white/20 accent-blue-500" />
+        <span className="text-xs text-gray-400">
+            {settings.quiet_mode ? '🔇 Disables webcam, sounds, and speech' : '🔊 Full mode with webcam & sounds'}
+        </span>
+    </div>
+    
+    <div className="flex gap-3 mt-2">
+        <button onClick={() => {
+            backend.request(JSON.stringify({action: 'get_processes'})).then(res => {
+                const data = JSON.parse(res);
+                if (data.processes && data.processes.length > 0) {
+                    let msg = '🔄 Running Processes:\n\n';
+                    data.processes.forEach((p, i) => {
+                        msg += `${i+1}. ${p.name} (PID: ${p.pid}) - CPU: ${p.cpu.toFixed(1)}% Mem: ${p.memory.toFixed(1)}%\n`;
+                    });
+                    alert(msg);
+                } else {
+                    alert('No processes found or psutil not installed.\n\nInstall with: pip install psutil');
+                }
+            });
+        }} className="glass-button px-6 py-2 rounded text-xs font-bold tracking-widest text-white uppercase bg-green-600/30 border-green-500/50 hover:bg-green-600">
+            <i className="fas fa-list mr-2"></i> Show Processes
+        </button>
+        <span className="text-[10px] text-gray-500 self-center">
+            <i className="fas fa-info-circle mr-1"></i> 
+            Lists top processes by CPU usage
+        </span>
+    </div>
+</div>
                             <div className="flex flex-col gap-1">
                                 <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Vision Sample Interval (ms)</label>
                                 <input type="number" value={settings.vision_sample_interval || 30} onChange={e => handleChange('vision_sample_interval', parseInt(e.target.value))} className="glass-input p-2.5 rounded text-sm" />
@@ -2086,7 +3466,12 @@ def get_html_content():
             const [goals, setGoals] = useState([]);
             const [flatGoals, setFlatGoals] = useState([]);
             const [heatmap, setHeatmap] = useState([]);
-            const [settings, setSettings] = useState({});
+            const [settings, setSettings] = useState({
+                // ... existing settings
+                git_status: 'unknown',
+                git_last_sync: null,
+                process_list: [],
+            });
             const [metrics, setMetrics] = useState(null);
             const [habits, setHabits] = useState([]);
             const [habitLogs, setHabitLogs] = useState([]);
@@ -2126,12 +3511,27 @@ def get_html_content():
                             if (data.queue) setQueue(data.queue);
                             if (data.notes) setNotes(data.notes);
                             if (data.metrics_data) setMetrics(data.metrics_data);
+
+                            py.request(JSON.stringify({action: 'get_sync_status'})).then(res => {
+                                const syncData = JSON.parse(res);
+                                setSettings(prev => ({
+                                    ...prev,
+                                    device_id: syncData.device_id,
+                                    sync_enabled: syncData.enabled,
+                                    sync_repo_url: syncData.repo_url,
+                                    sync_interval: syncData.interval,
+                                    has_token: syncData.has_token  // Add this line
+                                }));
+                            });
+                            py.request(JSON.stringify({action: 'get_mapped_folders'})).then(res => {
+                                const folders = JSON.parse(res);
+                                setSettings(prev => ({...prev, mapped_folders: folders.folders}));
+                            });
                         });
                     });
                 }
             }, []);
             
-            // Dynamic theme inject
             useEffect(() => {
                 if (settings.bg_image_path) document.body.style.backgroundImage = `url('${settings.bg_image_path}')`;
                 if (settings.font_family) document.body.style.fontFamily = settings.font_family;
@@ -2141,7 +3541,7 @@ def get_html_content():
             const renderContent = () => {
                 switch(currentView) {
                     case 'dashboard': return <DashboardView layout={layout} setLayout={setLayout} goals={goals} isEditingLayout={isEditingLayout} setIsEditingLayout={setIsEditingLayout} clockFeed={clockFeed} heatmap={heatmap} habits={habits} habitLogs={habitLogs} metrics={metrics} backend={backend} />;
-                    case 'hub': return <ProductivityHubView backend={backend} timerState={timerState} camFeed={camFeed} flatGoals={flatGoals} queue={queue} refreshQueue={setQueue} />;
+                    case 'hub': return <ProductivityHubView backend={backend} timerState={timerState} camFeed={camFeed} flatGoals={flatGoals} queue={queue} refreshQueue={setQueue} settings={settings} />;
                     case 'architecture': return <LifeArchitectureView goals={goals} backend={backend} refreshGoals={(d) => {setGoals(d.goals); setFlatGoals(d.flat_goals);}} />;
                     case 'habits': return <HabitMatrixView habits={habits} backend={backend} refreshHabits={setHabits} />;
                     case 'summary': return <DaySummaryView metrics={metrics} />;
