@@ -13,6 +13,14 @@ from datetime import datetime, timedelta
 # Force Python to look in the current directory for custom modules like health_parser
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+try:
+    import pymupdf
+except ImportError:
+    try:
+        import fitz as pymupdf
+    except ImportError:
+        pymupdf = None
+
 from PyQt6.QtCore import QObject, pyqtSlot, pyqtSignal, QTimer, Qt, QTime, QByteArray, QBuffer, QIODevice, QRectF
 from PyQt6.QtGui import QImage, QPainter, QColor, QBrush, QPen, QFont
 from PyQt6.QtWidgets import QWidget, QApplication, QFileDialog
@@ -125,6 +133,18 @@ class SystemBridge(QObject):
         self.scan_timer = QTimer()
         self.scan_timer.timeout.connect(self.check_auto_scans)
         self.scan_timer.start(10000)
+        
+        # PDF Library State
+        self.lib_path = os.path.expanduser("~/MindPalace_Library")
+        os.makedirs(self.lib_path, exist_ok=True)
+        # Ensure it's in sync paths
+        paths = config.get("sync_local_paths", [])
+        if self.lib_path not in paths:
+            paths.append(self.lib_path)
+            config.set("sync_local_paths", paths)
+            
+        self.active_pdf = None
+        self.active_pdf_name = ""
 
     def check_auto_scans(self):
         def worker():
@@ -338,14 +358,6 @@ class SystemBridge(QObject):
             for k, v in req.get("data", {}).items(): config.set(k, v)
             return json.dumps({"status": "saved"})
 
-
-
-
-
-        elif action == "save_settings":
-            for k, v in req.get("data", {}).items(): config.set(k, v)
-            return json.dumps({"status": "saved"})
-
         elif action == "save_file":
             parent = QApplication.activeWindow()
             ext = req.get("ext", "txt")
@@ -360,11 +372,6 @@ class SystemBridge(QObject):
                 except Exception as e:
                     return json.dumps({"status": "error", "message": str(e)})
             return json.dumps({"status": "cancelled"})
-
-
-
-
-
 
         elif action == "get_git_status":
             try:
@@ -442,7 +449,6 @@ class SystemBridge(QObject):
                 self.vision.cap = None
             return json.dumps({"status": "ok", "quiet_mode": enabled})
 
-
         elif action == "reset_data":
             tables_to_clear = [
                 "courses", "pomodoro_sessions", "cascading_goals", "habits", 
@@ -457,9 +463,6 @@ class SystemBridge(QObject):
                     pass
             db.conn.commit()
             return json.dumps({"status": "cleared"})
-
-        elif action == "open_file_dialog":
-            parent = QApplication.activeWindow()
 
         elif action == "open_file_dialog":
             parent = QApplication.activeWindow()
@@ -636,7 +639,7 @@ class SystemBridge(QObject):
             sub = req.get("sub")
             if sub == "add": db.c.execute("INSERT INTO habits (uuid, modified_at, name, type, created_at) VALUES (?, ?, ?, ?, ?)", (uuid.uuid4().hex, datetime.now().isoformat(), req.get("name"), req.get("type", "Positive"), datetime.now().isoformat()))
             elif sub == "edit": db.c.execute("UPDATE habits SET name=?, type=?, modified_at=? WHERE id=?", (req.get("name"), req.get("type"), datetime.now().isoformat(), req.get("id")))
-            elif sub == "delete": db.c.execute("DELETE FROM habits WHERE id=?", (req.get("id"),)); db.c.execute("DELETE FROM habit_logs WHERE habit_id=?", (req.get("id"),))
+            elif sub == "delete": db.c.execute("DELETE FROM habits WHERE id=?"); db.c.execute("DELETE FROM habit_logs WHERE habit_id=?", (req.get("id"),))
             elif sub == "toggle_log":
                 hid, dt, st = req.get("habit_id"), req.get("date"), req.get("status", 1)
                 existing = db.c.execute("SELECT id FROM habit_logs WHERE habit_id=? AND date=?", (hid, dt)).fetchone()
@@ -722,6 +725,79 @@ class SystemBridge(QObject):
                         db.c.execute(f"INSERT INTO {table} ({cols}) VALUES ({placeholders})", list(row.values()))
             db.conn.commit()
             return self.request(json.dumps({"action": "init"}))
+
+        elif action == "lib_list":
+            files = [f for f in os.listdir(self.lib_path) if f.lower().endswith('.pdf')]
+            return json.dumps({"files": files})
+            
+        elif action == "lib_open":
+            if not pymupdf: return json.dumps({"error": "PyMuPDF not installed. Run: pip install pymupdf"})
+            fname = req.get("filename")
+            path = os.path.join(self.lib_path, fname)
+            try:
+                if self.active_pdf: self.active_pdf.close()
+                self.active_pdf = pymupdf.open(path)
+                self.active_pdf_name = fname
+                return json.dumps({"status": "ok", "total_pages": len(self.active_pdf)})
+            except Exception as e:
+                return json.dumps({"error": str(e)})
+                
+        elif action == "lib_page":
+            if not self.active_pdf: return json.dumps({"error": "No PDF open"})
+            page_num = req.get("page", 0)
+            zoom = req.get("zoom", 1.5)
+            if page_num < 0 or page_num >= len(self.active_pdf): return json.dumps({"error": "Invalid page"})
+            
+            page = self.active_pdf[page_num]
+            mat = pymupdf.Matrix(zoom, zoom)
+            pix = page.get_pixmap(matrix=mat)
+            img_b64 = base64.b64encode(pix.tobytes("png")).decode('utf-8')
+            
+            annots = []
+            annot = page.first_annot
+            while annot:
+                info = annot.info
+                annots.append({
+                    "subject": info.get("subject", "Annot"),
+                    "title": info.get("title", "User"),
+                    "content": info.get("content", "")
+                })
+                annot = annot.next
+                
+            return json.dumps({"b64": img_b64, "width": pix.width, "height": pix.height, "annots": annots})
+            
+        elif action == "lib_annot":
+            if not self.active_pdf: return json.dumps({"error": "No PDF open"})
+            page_num = req.get("page", 0)
+            rect_data = req.get("rect") # [x0, y0, x1, y1]
+            tool = req.get("tool", "Highlight")
+            text = req.get("text", "")
+            
+            page = self.active_pdf[page_num]
+            r = pymupdf.Rect(*rect_data)
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            device = config.get("device_id", "UnknownDevice")
+            
+            try:
+                if tool == "Highlight":
+                    annot = page.add_highlight_annot(r)
+                    annot.set_colors(stroke=(1, 1, 0))
+                    annot.set_info(info={"title": device, "subject": "Highlight", "content": f"Captured at {timestamp}"})
+                    annot.update()
+                elif tool == "Underline":
+                    annot = page.add_underline_annot(r)
+                    annot.set_colors(stroke=(0, 0.5, 1))
+                    annot.set_info(info={"title": device, "subject": "Underline", "content": f"Captured at {timestamp}"})
+                    annot.update()
+                elif tool == "Note":
+                    annot = page.add_text_annot(r.tl, text)
+                    annot.set_info(info={"title": device, "subject": "Note", "content": f"{timestamp}\n{text}"})
+                    annot.update()
+                    
+                self.active_pdf.save(self.active_pdf.name, incremental=True, encryption=pymupdf.PDF_ENCRYPT_KEEP)
+                return json.dumps({"status": "ok"})
+            except Exception as e:
+                return json.dumps({"error": str(e)})
 
         return json.dumps({"error": "Unknown action"})
 

@@ -619,6 +619,163 @@
             );
         };
 
+        const PDFLibraryView = ({ backend }) => {
+            const [files, setFiles] = useState([]);
+            const [activeFile, setActiveFile] = useState(null);
+            const [pageData, setPageData] = useState(null);
+            const [pageNum, setPageNum] = useState(0);
+            const [totalPages, setTotalPages] = useState(0);
+            const [zoom, setZoom] = useState(1.5);
+            const [tool, setTool] = useState("Highlight");
+            const [annots, setAnnots] = useState([]);
+            const [isAutoTurn, setIsAutoTurn] = useState(false);
+            const [autoTurnSecs, setAutoTurnSecs] = useState(10);
+            const [isFullscreen, setIsFullscreen] = useState(false);
+            
+            const [drawing, setDrawing] = useState(false);
+            const [startPos, setStartPos] = useState(null);
+            const [currPos, setCurrPos] = useState(null);
+            const imgRef = useRef(null);
+
+            const fetchFiles = () => {
+                backend.request(JSON.stringify({action: 'lib_list'})).then(res => setFiles(JSON.parse(res).files || []));
+            };
+
+            useEffect(() => { if(backend) fetchFiles(); }, [backend]);
+
+            useEffect(() => {
+                let interval;
+                if (isAutoTurn) interval = setInterval(() => changePage(1), autoTurnSecs * 1000);
+                return () => clearInterval(interval);
+            }, [isAutoTurn, autoTurnSecs, pageNum, totalPages]);
+
+            const loadPdf = (f) => {
+                backend.request(JSON.stringify({action: 'lib_open', filename: f})).then(res => {
+                    const data = JSON.parse(res);
+                    if (data.status === 'ok') {
+                        setActiveFile(f); setTotalPages(data.total_pages); setPageNum(0); renderPage(0, zoom);
+                    } else alert(data.error);
+                });
+            };
+
+            const renderPage = (p, z) => {
+                if (p < 0 || p >= totalPages) return;
+                backend.request(JSON.stringify({action: 'lib_page', page: p, zoom: z})).then(res => {
+                    const data = JSON.parse(res);
+                    if (data.b64) {
+                        setPageData(`data:image/png;base64,${data.b64}`); setPageNum(p); setZoom(z); setAnnots(data.annots || []);
+                    }
+                });
+            };
+
+            const changePage = (delta) => {
+                const next = pageNum + delta;
+                if (next >= 0 && next < totalPages) renderPage(next, zoom);
+            };
+
+            const handleMouseDown = (e) => {
+                if (!imgRef.current) return;
+                const rect = imgRef.current.getBoundingClientRect();
+                const x = e.clientX - rect.left; const y = e.clientY - rect.top;
+                setStartPos({x, y}); setCurrPos({x, y}); setDrawing(true);
+            };
+
+            const handleMouseMove = (e) => {
+                if (!drawing || !imgRef.current) return;
+                const rect = imgRef.current.getBoundingClientRect();
+                setCurrPos({x: Math.max(0, Math.min(e.clientX - rect.left, rect.width)), y: Math.max(0, Math.min(e.clientY - rect.top, rect.height))});
+            };
+
+            const handleMouseUp = () => {
+                if (!drawing) return;
+                setDrawing(false);
+                if (!startPos || !currPos) return;
+                const w = Math.abs(currPos.x - startPos.x); const h = Math.abs(currPos.y - startPos.y);
+                if (w < 5 || h < 5) return;
+
+                const x0 = Math.min(startPos.x, currPos.x) / zoom; const y0 = Math.min(startPos.y, currPos.y) / zoom;
+                const x1 = Math.max(startPos.x, currPos.x) / zoom; const y1 = Math.max(startPos.y, currPos.y) / zoom;
+
+                let text = "";
+                if (tool === "Note") { text = prompt("Enter note text:"); if (!text) return; }
+
+                backend.request(JSON.stringify({action: 'lib_annot', page: pageNum, rect: [x0, y0, x1, y1], tool, text})).then(res => {
+                    renderPage(pageNum, zoom); // Refresh to see annot
+                });
+            };
+
+            return (
+                <div className={`flex flex-col fade-in transition-all duration-300 ${isFullscreen ? 'fixed inset-0 z-[100] bg-[#050505] p-6' : 'h-full'}`}>
+                    {!isFullscreen && <div className="flex justify-between items-center mb-6 shrink-0"><h2 className="text-2xl font-serif font-bold text-white tracking-widest uppercase drop-shadow-md">PDF Library & Meta-Annotation</h2></div>}
+                    <div className="flex gap-4 flex-grow overflow-hidden">
+                        {!isFullscreen && (
+                            <div className="w-1/4 glass-panel p-4 flex flex-col gap-3 shrink-0 overflow-y-auto custom-scrollbar">
+                                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest border-b border-white/10 pb-2">Synced Documents</h3>
+                                <button onClick={fetchFiles} className="glass-button w-full py-2 rounded text-[10px] font-bold tracking-widest text-blue-300 uppercase shadow-lg mb-2 border border-blue-500/30"><i className="fas fa-sync mr-1"></i> Refresh Folder</button>
+                                {files.length === 0 && <div className="text-[10px] text-gray-500 italic mt-2">Place PDFs in ~/MindPalace_Library</div>}
+                                {files.map(f => (
+                                    <div key={f} onClick={() => loadPdf(f)} className={`p-3 text-xs rounded cursor-pointer border truncate transition-all ${activeFile === f ? 'bg-blue-600/30 border-blue-400 text-white shadow-[0_0_10px_rgba(59,130,246,0.5)]' : 'bg-white/5 border-white/10 hover:bg-white/10 text-gray-300'}`}>{f}</div>
+                                ))}
+                            </div>
+                        )}
+                        <div className={`glass-panel p-0 flex flex-col ${isFullscreen ? 'w-full' : 'w-2/4'} overflow-hidden relative`}>
+                            <div className="flex flex-wrap gap-2 p-3 border-b border-white/10 bg-black/40 items-center justify-between shrink-0">
+                                <div className="flex gap-2">
+                                    {['Highlight', 'Underline', 'Note'].map(t => (
+                                        <button key={t} onClick={() => setTool(t)} className={`px-4 py-1.5 rounded text-[11px] font-bold tracking-widest uppercase transition ${tool === t ? 'bg-blue-600 text-white shadow-lg' : 'bg-white/10 text-gray-300 hover:bg-white/20'}`}>{t}</button>
+                                    ))}
+                                    <div className="w-px h-6 bg-white/20 mx-2"></div>
+                                    <button onClick={() => renderPage(pageNum, Math.max(0.5, zoom - 0.2))} className="px-3 py-1.5 rounded bg-white/10 hover:bg-white/20 text-white text-xs"><i className="fas fa-search-minus"></i></button>
+                                    <button onClick={() => renderPage(pageNum, Math.min(4.0, zoom + 0.2))} className="px-3 py-1.5 rounded bg-white/10 hover:bg-white/20 text-white text-xs"><i className="fas fa-search-plus"></i></button>
+                                </div>
+                                <div className="flex gap-2 items-center">
+                                    <input type="number" value={autoTurnSecs} onChange={e=>setAutoTurnSecs(parseInt(e.target.value))} className="glass-input w-16 px-2 py-1.5 rounded text-xs text-center font-bold" title="Seconds" />
+                                    <button onClick={() => setIsAutoTurn(!isAutoTurn)} className={`px-4 py-1.5 rounded text-[11px] font-bold tracking-widest uppercase transition ${isAutoTurn ? 'bg-green-600 text-white shadow-lg' : 'bg-white/10 text-gray-300 hover:bg-white/20'}`}>{isAutoTurn ? 'Stop Auto' : 'Start Auto'}</button>
+                                    <button onClick={() => setIsFullscreen(!isFullscreen)} className="px-3 py-1.5 rounded bg-white/10 hover:bg-white/20 text-white text-xs ml-2"><i className={`fas ${isFullscreen ? 'fa-compress' : 'fa-expand'}`}></i></button>
+                                </div>
+                            </div>
+                            <div className="flex-grow overflow-auto bg-black/60 flex justify-center custom-scrollbar relative p-4">
+                                {pageData ? (
+                                    <div className="relative inline-block shadow-2xl" onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}>
+                                        <img ref={imgRef} src={pageData} alt="PDF Page" className="block cursor-crosshair pointer-events-none rounded" />
+                                        {drawing && startPos && currPos && (
+                                            <div className="absolute border-2 border-blue-500 bg-blue-500/20 pointer-events-none" style={{
+                                                left: Math.min(startPos.x, currPos.x), top: Math.min(startPos.y, currPos.y),
+                                                width: Math.abs(currPos.x - startPos.x), height: Math.abs(currPos.y - startPos.y)
+                                            }}></div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div className="text-gray-500 font-bold uppercase tracking-widest m-auto flex flex-col items-center"><i className="fas fa-book-reader text-5xl mb-4 opacity-50"></i>Select a PDF from Library</div>
+                                )}
+                            </div>
+                            <div className="p-3 border-t border-white/10 bg-black/40 flex justify-between items-center shrink-0">
+                                <button onClick={() => changePage(-1)} disabled={pageNum === 0} className="px-6 py-1.5 rounded bg-white/10 hover:bg-white/20 text-white text-[11px] font-bold tracking-widest uppercase disabled:opacity-30 transition">◀ Prev</button>
+                                <span className="text-xs text-gray-300 font-bold font-mono tracking-widest">Page {totalPages > 0 ? pageNum + 1 : 0} / {totalPages}</span>
+                                <button onClick={() => changePage(1)} disabled={pageNum >= totalPages - 1} className="px-6 py-1.5 rounded bg-white/10 hover:bg-white/20 text-white text-[11px] font-bold tracking-widest uppercase disabled:opacity-30 transition">Next ▶</button>
+                            </div>
+                        </div>
+                        {!isFullscreen && (
+                            <div className="w-1/4 glass-panel p-4 flex flex-col gap-3 shrink-0 overflow-y-auto custom-scrollbar">
+                                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest border-b border-white/10 pb-2">Page Metadata</h3>
+                                {annots.length === 0 ? <div className="text-[10px] text-gray-500 italic mt-2">No annotations on this page. Drag to draw.</div> : 
+                                    annots.map((a, i) => (
+                                        <div key={i} className="bg-white/5 p-3 rounded border border-white/10 text-xs hover:bg-white/10 transition">
+                                            <div className="flex justify-between text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-2 border-b border-white/5 pb-1">
+                                                <span className={a.subject === 'Highlight' ? 'text-yellow-400' : a.subject === 'Underline' ? 'text-blue-400' : 'text-green-400'}><i className={`fas fa-${a.subject === 'Note' ? 'comment' : 'marker'} mr-1`}></i> {a.subject}</span>
+                                                <span className="opacity-70">{a.title}</span>
+                                            </div>
+                                            <div className="text-gray-200 whitespace-pre-wrap font-mono text-[10px] leading-relaxed">{a.content}</div>
+                                        </div>
+                                    ))
+                                }
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
         const QuizEngineView = ({ quizzes, backend, refreshQuizzes, flatGoals }) => {
             const [activeTab, setActiveTab] = useState('library'); const [qTitle, setQTitle] = useState(""); const [qCourse, setQCourse] = useState(""); const [qFolder, setQFolder] = useState("Uncategorized"); const [qColor, setQColor] = useState("#3b82f6"); const [qJson, setQJson] = useState('[\n  {"q": "Difference between Process and Thread?", "opts": ["Memory Isolation", "No Difference"], "ans": 0}\n]'); const [activeQuiz, setActiveQuiz] = useState(null); const [qIndex, setQIndex] = useState(0); const [score, setScore] = useState(0); const [selectedOpt, setSelectedOpt] = useState(null);
 
@@ -821,55 +978,27 @@
             const exportFile = (type) => {
                 let data, mime, ext;
                 const parsedHTML = marked.parse(content || "*Nothing to preview.*");
-                
-                if (type === 'pdf') {
-                    let printFrame = document.getElementById('print-frame');
-                    if (!printFrame) {
-                        printFrame = document.createElement('iframe');
-                        printFrame.id = 'print-frame';
-                        printFrame.style.position = 'fixed';
-                        printFrame.style.right = '0';
-                        printFrame.style.bottom = '0';
-                        printFrame.style.width = '0';
-                        printFrame.style.height = '0';
-                        printFrame.style.border = '0';
-                        document.body.appendChild(printFrame);
-                    }
-                    const doc = printFrame.contentWindow.document;
-                    doc.open();
-                    doc.write(`<!DOCTYPE html><html><head><title>${title || 'Note'}</title><style>body{font-family:sans-serif;padding:2rem;color:#000;line-height:1.6;} blockquote{border-left:4px solid #ccc;padding-left:1rem;margin-left:0;} code{background:#eee;padding:0.2rem;border-radius:4px;} pre code{background:none;padding:0;} @media print{ body{background:#fff;} }</style></head><body>${parsedHTML}</body></html>`);
-                    doc.close();
-                    
-                    printFrame.contentWindow.focus();
-                    setTimeout(() => { printFrame.contentWindow.print(); }, 250);
-                    return;
-                }
-                
                 if (type === 'md') {
                     data = content; mime = "text/markdown"; ext = "md";
                 } else if (type === 'html') {
-                    data = `<!DOCTYPE html><html><head><title>${title || 'Note'}</title><meta charset="utf-8"><style>body{font-family:sans-serif;padding:2rem;color:#333;line-height:1.6;} blockquote{border-left:4px solid #ccc;padding-left:1rem;margin-left:0;} code{background:#eee;padding:0.2rem;border-radius:4px;} pre code{background:none;padding:0;}</style></head><body>${parsedHTML}</body></html>`;
+                    data = `<!DOCTYPE html><html><head><title>${title}</title><meta charset="utf-8"><style>body{font-family:sans-serif;padding:2rem;color:#333;line-height:1.6;} blockquote{border-left:4px solid #ccc;padding-left:1rem;margin-left:0;} code{background:#eee;padding:0.2rem;border-radius:4px;} pre code{background:none;padding:0;}</style></head><body>${parsedHTML}</body></html>`;
                     mime = "text/html"; ext = "html";
+                } else if (type === 'pdf') {
+                    const win = window.open('', '', 'width=800,height=600');
+                    win.document.write(`<!DOCTYPE html><html><head><title>${title}</title><style>body{font-family:sans-serif;padding:2rem;color:#000;line-height:1.6;} blockquote{border-left:4px solid #ccc;padding-left:1rem;margin-left:0;} code{background:#eee;padding:0.2rem;border-radius:4px;} pre code{background:none;padding:0;} @media print{ body{background:#fff;} }</style></head><body>${parsedHTML}</body></html>`);
+                    win.document.close();
+                    win.focus();
+                    setTimeout(() => { win.print(); win.close(); }, 250);
+                    return;
                 }
                 
-                if (backend) {
-                    backend.request(JSON.stringify({
-                        action: 'save_file',
-                        title: title || 'Export',
-                        ext: ext,
-                        content: data
-                    }));
-                } else {
-                    const blob = new Blob([data], {type: mime});
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `${title || 'Export'}.${ext}`;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    setTimeout(() => URL.revokeObjectURL(url), 100);
-                }
+                const blob = new Blob([data], {type: mime});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${title || 'Export'}.${ext}`;
+                a.click();
+                URL.revokeObjectURL(url);
             };
 
             return (
@@ -2056,6 +2185,7 @@
                     case 'architecture': return <LifeArchitectureView goals={goals} backend={backend} refreshGoals={(d) => {setGoals(d.goals); setFlatGoals(d.flat_goals);}} />;
                     case 'habits': return <HabitMatrixView habits={habits} backend={backend} refreshHabits={setHabits} habitLogs={habitLogs} setHabitLogs={setHabitLogs} />;
                     case 'summary': return <DaySummaryView metrics={metrics} />;
+                    case 'library': return <PDFLibraryView backend={backend} />;
                     case 'quiz': return <QuizEngineView quizzes={quizzes} backend={backend} refreshQuizzes={setQuizzes} flatGoals={flatGoals} />;
                     case 'flashcards': return <FlashcardsView flashcards={flashcards} backend={backend} refreshCards={setFlashcards} flatGoals={flatGoals} />;
                     case 'notes': return <NotesView notes={notes} backend={backend} refreshNotes={setNotes} flatGoals={flatGoals} />;
@@ -2079,6 +2209,7 @@
                                 { id: 'architecture', icon: 'fa-sitemap', label: 'Life Architecture' },
                                 { id: 'habits', icon: 'fa-check-square', label: 'Habit Matrix' },
                                 { id: 'summary', icon: 'fa-calendar-day', label: 'Day Summary' },
+                                { id: 'library', icon: 'fa-book-reader', label: 'PDF Library' },
                                 { id: 'quiz', icon: 'fa-question-circle', label: 'Quiz Engine' },
                                 { id: 'flashcards', icon: 'fa-clone', label: 'Flashcards' },
                                 { id: 'notes', icon: 'fa-edit', label: 'Notes' },
