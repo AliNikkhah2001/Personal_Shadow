@@ -19,7 +19,8 @@ REQUIRED_PACKAGES = {
     "numpy": "numpy",
     "git": "GitPython",
     "machineid": "py-machineid",
-    "psutil": "psutil"
+    "psutil": "psutil",
+    "pymupdf": "PyMuPDF"
 }
 
 if sys.platform == "win32":

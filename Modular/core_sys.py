@@ -4,15 +4,12 @@ import json
 import sqlite3
 import hashlib
 import subprocess
-import platform
 
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import QApplication
 
 def load_env_file():
     env_file = os.path.join(os.path.dirname(__file__), '.env')
-    print(f"Looking for .env at: {env_file}")
-    
     if os.path.exists(env_file):
         try:
             with open(env_file, 'r', encoding='utf-8-sig') as f:
@@ -22,9 +19,6 @@ def load_env_file():
                         if '=' in line:
                             key, value = line.split('=', 1)
                             os.environ[key.strip()] = value.strip().strip('"\'')
-            token = os.getenv('GITHUB_TOKEN', '')
-            if token:
-                print(f"✅ GitHub token loaded from .env ({token[:4]}...{token[-4:]})")
             return True
         except Exception as e:
             print(f"⚠️ Could not load .env: {e}")
@@ -57,6 +51,8 @@ class ConfigManager:
         try:
             with open(fn, 'r') as f: self.cfg = json.load(f)
         except: self.cfg = self.defaults.copy()
+        for k, v in self.defaults.items():
+            if self.cfg.get(k) is None: self.cfg[k] = v
         
     def get(self, k, d=None): return self.cfg.get(k, d if d is not None else self.defaults.get(k))
     def set(self, k, v):
@@ -64,6 +60,14 @@ class ConfigManager:
         with open(self.fn, 'w') as f: json.dump(self.cfg, f)
 
 config = ConfigManager()
+
+# Ensure PDF Library is automatically created and synced
+lib_path = os.path.expanduser("~/MindPalace_Library")
+os.makedirs(lib_path, exist_ok=True)
+if lib_path not in config.cfg.get("sync_local_paths", []):
+    paths = config.cfg.get("sync_local_paths", [])
+    paths.append(lib_path)
+    config.set("sync_local_paths", paths)
 
 class DatabaseManager:
     def __init__(self, db_name="second_brain.db"):
@@ -84,6 +88,9 @@ class DatabaseManager:
             CREATE TABLE IF NOT EXISTS notes (id INTEGER PRIMARY KEY, title TEXT, content TEXT, timestamp TEXT, course TEXT, folder TEXT DEFAULT 'Uncategorized', color TEXT DEFAULT '#3b82f6', uuid TEXT UNIQUE, modified_at TEXT);
             CREATE TABLE IF NOT EXISTS health_profile (id INTEGER PRIMARY KEY, data_json TEXT, uuid TEXT UNIQUE, modified_at TEXT);
             CREATE TABLE IF NOT EXISTS health_logs (id INTEGER PRIMARY KEY, log_type TEXT, date TEXT, data_json TEXT, uuid TEXT UNIQUE, modified_at TEXT);
+            CREATE TABLE IF NOT EXISTS custom_foods (id INTEGER PRIMARY KEY, name TEXT UNIQUE, kcal REAL, protein REAL, fat REAL, carbs REAL, category TEXT, uuid TEXT UNIQUE, modified_at TEXT);
+            CREATE TABLE IF NOT EXISTS custom_activities (id INTEGER PRIMARY KEY, name TEXT UNIQUE, met REAL, category TEXT, uuid TEXT UNIQUE, modified_at TEXT);
+            CREATE TABLE IF NOT EXISTS health_plans (id INTEGER PRIMARY KEY, type TEXT, title TEXT, details TEXT, uuid TEXT UNIQUE, modified_at TEXT);
         ''')
         self.conn.commit()
 
@@ -93,33 +100,3 @@ def get_color(c_name):
     if c_name == "Break": return QColor(100,100,100,200)
     if not c_name or c_name == "None": return QColor("#40c463")
     return QColor(f"#{hashlib.md5(c_name.encode()).hexdigest()[:6]}")
-
-def play_system_sound(sound_name):
-    if config.get("mute_sounds", False) or config.get("quiet_mode", False): return
-    if sys.platform == "darwin":
-        path = f"/System/Library/Sounds/{sound_name}.aiff"
-        if os.path.exists(path): subprocess.Popen(["afplay", path])
-        else: QApplication.beep()
-    elif sys.platform == "win32":
-        try:
-            import winsound
-            winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
-        except: QApplication.beep()
-    else: QApplication.beep()
-
-def speak_text(text):
-    if config.get("mute_speech", False) or config.get("quiet_mode", False): return
-    if sys.platform == "darwin": subprocess.Popen(["say", text])
-    elif sys.platform == "win32":
-        try:
-            import pyttsx3
-            engine = pyttsx3.init()
-            engine.say(text)
-            engine.runAndWait()
-        except: pass
-    else: subprocess.Popen(["espeak", text], stderr=subprocess.DEVNULL)
-
-def set_max_volume():
-    if sys.platform == "darwin":
-        try: subprocess.Popen(["osascript", "-e", "set volume output volume 100"])
-        except: pass

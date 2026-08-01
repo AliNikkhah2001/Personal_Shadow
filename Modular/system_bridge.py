@@ -442,12 +442,24 @@ class SystemBridge(QObject):
                 self.vision.cap = None
             return json.dumps({"status": "ok", "quiet_mode": enabled})
 
+
         elif action == "reset_data":
-            db.c.execute("DELETE FROM pomodoro_sessions")
-            db.c.execute("DELETE FROM habit_logs")
-            db.c.execute("DELETE FROM focus_queue")
+            tables_to_clear = [
+                "courses", "pomodoro_sessions", "cascading_goals", "habits", 
+                "habit_logs", "flashcards", "quizzes", "focus_queue", "notes", 
+                "health_profile", "health_logs", "custom_foods", "custom_activities", 
+                "health_plans", "course_targets", "starred_questions", "exams", "todos"
+            ]
+            for table in tables_to_clear:
+                try:
+                    db.c.execute(f"DELETE FROM {table}")
+                except Exception:
+                    pass
             db.conn.commit()
             return json.dumps({"status": "cleared"})
+
+        elif action == "open_file_dialog":
+            parent = QApplication.activeWindow()
 
         elif action == "open_file_dialog":
             parent = QApplication.activeWindow()
