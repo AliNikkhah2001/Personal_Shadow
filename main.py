@@ -2486,24 +2486,45 @@ const startFocusSession = () => {
         return;
     }
     
-    // Check if there are items in the queue
+    // Always check if there are items in the queue FIRST
     if (queue && queue.length > 0) {
-        // Start the first item in the queue
+        // Find the first item in the queue that isn't completed
+        // (Items are marked as completed when they've been processed)
+        // We'll use the queue order - the first item is always the next one
+        
+        // Check if the first item is already active or completed
         const firstItem = queue[0];
+        
+        // Check if this item is already being processed
+        const isAlreadyProcessing = timerState.is_running && 
+            timerState.course === firstItem.course && 
+            timerState.time_str && 
+            timerState.time_str !== "00:00";
+        
+        if (isAlreadyProcessing) {
+            // If already running, just resume
+            console.log('⏩ Session already running, resuming...');
+            return;
+        }
+        
+        // Start the first item in the queue
         setCurrentQueueIndex(0);
         
-        console.log(`Starting queue item: ${firstItem.title} (${firstItem.duration}m) - ${firstItem.type}`);
+        console.log(`🎯 Starting queue item: ${firstItem.title || firstItem.course} (${firstItem.duration}m) - ${firstItem.type}`);
         
         backend.request(JSON.stringify({
             action: 'start_timer', 
             duration: firstItem.duration, 
             course: firstItem.course || "General",
-            type: firstItem.type || "Work"
+            type: firstItem.type || "Work",
+            title: firstItem.title || firstItem.course || "General"
         })).then(res => {
             const data = JSON.parse(res);
+            console.log('Timer start response:', data);
             if (data.status === 'started') {
                 setShowProcessList(false);
                 setIsPaused(false);
+                // The queue item is now active - it will be marked as completed when the timer ends
             }
         }).catch(err => {
             console.error('Failed to start timer:', err);
@@ -2515,7 +2536,7 @@ const startFocusSession = () => {
         const course = crs || "General";
         const sessionType = type || "Work";
         
-        console.log(`No queue items. Starting custom timer: ${duration}m, ${course}, ${sessionType}`);
+        console.log(`📝 No queue items. Starting custom timer: ${duration}m, ${course}, ${sessionType}`);
         
         backend.request(JSON.stringify({
             action: 'start_timer', 
