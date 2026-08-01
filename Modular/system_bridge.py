@@ -338,6 +338,34 @@ class SystemBridge(QObject):
             for k, v in req.get("data", {}).items(): config.set(k, v)
             return json.dumps({"status": "saved"})
 
+
+
+
+
+        elif action == "save_settings":
+            for k, v in req.get("data", {}).items(): config.set(k, v)
+            return json.dumps({"status": "saved"})
+
+        elif action == "save_file":
+            parent = QApplication.activeWindow()
+            ext = req.get("ext", "txt")
+            content = req.get("content", "")
+            title = req.get("title", "Export")
+            file_path, _ = QFileDialog.getSaveFileName(parent, "Save File", f"{title}.{ext}", f"Files (*.{ext})")
+            if file_path:
+                try:
+                    with open(file_path, 'w', encoding='utf-8') as f:
+                        f.write(content)
+                    return json.dumps({"status": "saved", "path": file_path})
+                except Exception as e:
+                    return json.dumps({"status": "error", "message": str(e)})
+            return json.dumps({"status": "cancelled"})
+
+
+
+
+
+
         elif action == "get_git_status":
             try:
                 repo_path = os.path.join(os.path.expanduser("~"), ".mindpalace_sync_repo")
@@ -388,7 +416,19 @@ class SystemBridge(QObject):
             return json.dumps({"status": "success", "path": path})
 
         elif action == "get_mapped_folders":
-            return json.dumps({"folders": config.get("sync_local_paths", [])})
+            return json.dumps({
+                "folders": config.get("sync_local_paths", []),
+                "network_folders": self.sync_manager.get_network_folders()
+            })
+            
+        elif action == "open_network_folder":
+            path = req.get("path", "")
+            if os.path.exists(path):
+                if sys.platform == 'darwin': subprocess.Popen(['open', path])
+                elif sys.platform == 'win32': os.startfile(path)
+                else: subprocess.Popen(['xdg-open', path])
+                return json.dumps({"status": "opened"})
+            return json.dumps({"status": "error"})
 
         elif action == "get_sync_status":
             return json.dumps({"enabled": config.get("sync_enabled", False), "device_id": self.sync_manager.device_id, "repo_url": config.get("sync_repo_url", ""), "interval": config.get("sync_interval", 3600), "has_token": bool(GITHUB_TOKEN)})
@@ -584,7 +624,7 @@ class SystemBridge(QObject):
             sub = req.get("sub")
             if sub == "add": db.c.execute("INSERT INTO habits (uuid, modified_at, name, type, created_at) VALUES (?, ?, ?, ?, ?)", (uuid.uuid4().hex, datetime.now().isoformat(), req.get("name"), req.get("type", "Positive"), datetime.now().isoformat()))
             elif sub == "edit": db.c.execute("UPDATE habits SET name=?, type=?, modified_at=? WHERE id=?", (req.get("name"), req.get("type"), datetime.now().isoformat(), req.get("id")))
-            elif sub == "delete": db.c.execute("DELETE FROM habits WHERE id=?"); db.c.execute("DELETE FROM habit_logs WHERE habit_id=?", (req.get("id"),))
+            elif sub == "delete": db.c.execute("DELETE FROM habits WHERE id=?", (req.get("id"),)); db.c.execute("DELETE FROM habit_logs WHERE habit_id=?", (req.get("id"),))
             elif sub == "toggle_log":
                 hid, dt, st = req.get("habit_id"), req.get("date"), req.get("status", 1)
                 existing = db.c.execute("SELECT id FROM habit_logs WHERE habit_id=? AND date=?", (hid, dt)).fetchone()

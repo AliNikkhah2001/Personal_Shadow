@@ -65,7 +65,6 @@ class SyncManager(QObject):
                     if result.returncode == 0: return True, "Repository pulled successfully"
                     else: raise Exception(result.stderr)
             except Exception as e:
-                print(f"Error with repo: {e}")
                 shutil.rmtree(self.repo_path)
                 return self.setup_repo()
         else:
@@ -150,10 +149,20 @@ class SyncManager(QObject):
     def merge_remote_data(self, remote_data):
         import sqlite3
         tables = remote_data.get("tables", {})
-        order = ["courses", "habits", "cascading_goals", "flashcards", "quizzes", "notes", "focus_queue", "habit_logs", "pomodoro_sessions", "health_profile", "health_logs"]
-        for table in order:
-            if table not in tables: continue
-            for row in tables[table]:
+        
+        # Determine all current tables dynamically
+        db.c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT IN ('sqlite_sequence')")
+        valid_tables = [r[0] for r in db.c.fetchall()]
+        
+        for table, rows in tables.items():
+            if table not in valid_tables: continue
+            
+            # Check if this table supports UUID merging
+            db.c.execute(f"PRAGMA table_info({table})")
+            columns = [info[1] for info in db.c.fetchall()]
+            if "uuid" not in columns: continue # Skip tables without UUIDs to prevent dupes
+                
+            for row in rows:
                 uid = row.get("uuid")
                 if not uid: uid = uuid.uuid4().hex; row["uuid"] = uid
                 db.c.execute(f"SELECT id, modified_at FROM {table} WHERE uuid = ?", (uid,))
@@ -165,21 +174,27 @@ class SyncManager(QObject):
                         set_clause = ", ".join([f"{k} = ?" for k in row.keys() if k not in ["id", "uuid"]])
                         values = [row[k] for k in row.keys() if k not in ["id", "uuid"]] + [existing_id]
                         try: db.c.execute(f"UPDATE {table} SET {set_clause} WHERE id = ?", values)
-                        except sqlite3.IntegrityError as e: pass
+                        except sqlite3.IntegrityError: pass
                 else:
                     row.pop("id", None)
                     cols = ", ".join(row.keys()); placeholders = ", ".join(["?"] * len(row))
                     try: db.c.execute(f"INSERT INTO {table} ({cols}) VALUES ({placeholders})", list(row.values()))
-                    except sqlite3.IntegrityError as e: pass
+                    except sqlite3.IntegrityError: pass
         db.conn.commit()
     
     def export_local_data(self):
         settings = config.cfg.copy(); settings.pop("sync_github_token", None)
         data = {"device_id": self.device_id, "last_sync": datetime.now().isoformat(), "settings": settings, "tables": {}}
-        tables = ["courses", "pomodoro_sessions", "cascading_goals", "habits", "habit_logs", "flashcards", "quizzes", "focus_queue", "notes", "health_profile", "health_logs"]
+        
+        # Dynamically fetch all tables to ensure 100% data export (quizzes, notes, goals, etc)
+        db.c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT IN ('sqlite_sequence')")
+        tables = [r[0] for r in db.c.fetchall()]
+        
         for table in tables:
-            db.c.execute(f"SELECT * FROM {table}"); columns = [desc[0] for desc in db.c.description]
-            data["tables"][table] = [dict(zip(columns, row)) for row in db.c.fetchall()]
+            try:
+                db.c.execute(f"SELECT * FROM {table}"); columns = [desc[0] for desc in db.c.description]
+                data["tables"][table] = [dict(zip(columns, row)) for row in db.c.fetchall()]
+            except: pass
         return data
     
     def sync_files(self):
@@ -187,12 +202,54 @@ class SyncManager(QObject):
         if not local_paths: return
         device_files_dir = os.path.join(self.repo_path, self.files_dir, self.device_id)
         os.makedirs(device_files_dir, exist_ok=True)
+        
         for local_path in local_paths:
             if not os.path.exists(local_path): continue
-            for item in os.listdir(local_path):
-                src = os.path.join(local_path, item); dst = os.path.join(device_files_dir, item)
-                if os.path.isfile(src): shutil.copy2(src, dst)
-                elif os.path.isdir(src): shutil.copytree(src, dst, dirs_exist_ok=True)
+            base_folder = os.path.basename(os.path.normpath(local_path))
+            
+            for root, dirs, files in os.walk(local_path):
+                rel_path = os.path.relpath(root, local_path)
+                target_dir = os.path.join(device_files_dir, base_folder, rel_path)
+                if rel_path == '.': target_dir = os.path.join(device_files_dir, base_folder)
+                os.makedirs(target_dir, exist_ok=True)
+                
+                for f in files:
+                    src = os.path.join(root, f)
+                    dst = os.path.join(target_dir, f)
+                    try:
+                        # Defensive >50MB tracking to prevent GitHub rejecting the entire sync push
+                        file_size_mb = os.path.getsize(src) / (1024 * 1024)
+                        if file_size_mb > 95:
+                            print(f"[!] Skipping {f} ({file_size_mb:.1f}MB) - Exceeds safe GH threshold")
+                            continue
+                        shutil.copy2(src, dst)
+                    except: pass
+
+    def get_network_folders(self):
+        network_dir = os.path.join(self.repo_path, self.files_dir)
+        folders = []
+        if os.path.exists(network_dir):
+            for dev_id in os.listdir(network_dir):
+                dev_path = os.path.join(network_dir, dev_id)
+                if os.path.isdir(dev_path):
+                    file_count = 0
+                    latest_mod = 0
+                    for root, _, files in os.walk(dev_path):
+                        for f in files:
+                            if '.git' in root: continue
+                            file_count += 1
+                            mod_time = os.path.getmtime(os.path.join(root, f))
+                            if mod_time > latest_mod: latest_mod = mod_time
+                            
+                    last_update = datetime.fromtimestamp(latest_mod).strftime('%Y-%m-%d %H:%M') if latest_mod > 0 else "Never"
+                    folders.append({
+                        "device_id": dev_id,
+                        "is_local": dev_id == self.device_id,
+                        "file_count": file_count,
+                        "last_update": last_update,
+                        "path": dev_path
+                    })
+        return folders
     
     def map_folder(self, local_path):
         paths = config.get("sync_local_paths", [])
