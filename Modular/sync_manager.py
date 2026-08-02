@@ -19,10 +19,11 @@ class SyncManager(QObject):
         self.device_id = device_id or self.get_device_id()
         self.repo = None
         self.repo_path = os.path.join(os.path.expanduser("~"), ".mindpalace_sync_repo")
-        self.sync_data_file = "sync_data.json"
+        self.db_sync_dir = "db_exports" # NEW: Directory to hold individual device JSONs
         self.files_dir = "files"
         self.token = os.getenv('GITHUB_TOKEN', '')
-        if not self.token: self.token = config.get("sync_github_token", "")
+        if not self.token: 
+            self.token = config.get("sync_github_token", "")
         self.repo_url = config.get("sync_repo_url", "")
 
     def get_device_id(self):
@@ -41,6 +42,15 @@ class SyncManager(QObject):
                     with open(id_file, 'w') as f: f.write(device_id)
                     return device_id
     
+    def clean_git_locks(self):
+        """Fixes fatal: Unable to create '/.../.git/index.lock': File exists."""
+        lock_file = os.path.join(self.repo_path, '.git', 'index.lock')
+        if os.path.exists(lock_file):
+            try:
+                os.remove(lock_file)
+            except Exception as e:
+                print(f"[SyncManager] Failed to remove lock: {e}")
+
     def setup_repo(self):
         if not self.repo_url: return False, "No repository URL configured"
         os.environ['GIT_TERMINAL_PROMPT'] = '0'
@@ -51,19 +61,17 @@ class SyncManager(QObject):
         import subprocess
         if os.path.exists(self.repo_path):
             try:
+                self.clean_git_locks()
                 self.repo = git.Repo(self.repo_path)
                 subprocess.run(['git', 'remote', 'set-url', 'origin', url], cwd=self.repo_path, capture_output=True)
                 subprocess.run(['git', 'config', 'user.name', 'Mind Palace Sync'], cwd=self.repo_path)
                 subprocess.run(['git', 'config', 'user.email', 'sync@mindpalace.os'], cwd=self.repo_path)
                 subprocess.run(['git', 'config', 'http.postBuffer', '524288000'], cwd=self.repo_path)
                 subprocess.run(['git', 'config', 'http.version', 'HTTP/1.1'], cwd=self.repo_path)
+                subprocess.run(['git', 'config', 'pull.rebase', 'false'], cwd=self.repo_path) # Force merge strategy
                 
-                result = subprocess.run(['git', 'fetch', '--dry-run'], cwd=self.repo_path, capture_output=True, text=True)
-                if result.returncode == 0: return True, "Repository ready"
-                else:
-                    result = subprocess.run(['git', 'pull'], cwd=self.repo_path, capture_output=True, text=True)
-                    if result.returncode == 0: return True, "Repository pulled successfully"
-                    else: raise Exception(result.stderr)
+                result = subprocess.run(['git', 'fetch', 'origin'], cwd=self.repo_path, capture_output=True, text=True)
+                return True, "Repository ready"
             except Exception as e:
                 shutil.rmtree(self.repo_path)
                 return self.setup_repo()
@@ -75,124 +83,198 @@ class SyncManager(QObject):
                     self.repo = git.Repo(self.repo_path)
                     subprocess.run(['git', 'config', 'user.name', 'Mind Palace Sync'], cwd=self.repo_path)
                     subprocess.run(['git', 'config', 'user.email', 'sync@mindpalace.os'], cwd=self.repo_path)
-                    subprocess.run(['git', 'config', 'http.postBuffer', '524288000'], cwd=self.repo_path)
-                    subprocess.run(['git', 'config', 'http.version', 'HTTP/1.1'], cwd=self.repo_path)
+                    subprocess.run(['git', 'config', 'pull.rebase', 'false'], cwd=self.repo_path)
                     
                     gitignore_path = os.path.join(self.repo_path, '.gitignore')
                     with open(gitignore_path, 'w') as f:
-                        f.write('*\n!sync_data.json\n!files/\n!files/**\n.idea/\n.vscode/\n*.swp\n*.swo\n.DS_Store\nThumbs.db\n*.tmp\n*.temp\n*.log\n')
+                        f.write('*\n!db_exports/\n!db_exports/**\n!files/\n!files/**\n.idea/\n.vscode/\n*.swp\n.DS_Store\n')
                     subprocess.run(['git', 'add', '.gitignore'], cwd=self.repo_path)
-                    subprocess.run(['git', 'commit', '-m', 'Add .gitignore for data-only sync'], cwd=self.repo_path)
+                    subprocess.run(['git', 'commit', '-m', 'Init distributed sync rules'], cwd=self.repo_path)
                     subprocess.run(['git', 'push', '--set-upstream', 'origin', 'HEAD'], cwd=self.repo_path)
                     return True, "Repository cloned successfully"
                 else: 
                     return False, f"Clone failed: {result.stderr}"
             except Exception as e: 
                 return False, f"Failed to clone: {str(e)}"
+
+    def ensure_uuids_and_timestamps(self):
+        """Ensures every row in the DB has a UUID and timestamp to allow LWW Merging."""
+        db.c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT IN ('sqlite_sequence')")
+        tables = [r[0] for r in db.c.fetchall()]
+        now = datetime.now().isoformat()
+        
+        for table in tables:
+            db.c.execute(f"PRAGMA table_info({table})")
+            cols = [r[1] for r in db.c.fetchall()]
+            if 'uuid' not in cols or 'modified_at' not in cols:
+                continue
                 
+            db.c.execute(f"SELECT id FROM {table} WHERE uuid IS NULL OR uuid = '' OR modified_at IS NULL OR modified_at = ''")
+            rows = db.c.fetchall()
+            for (row_id,) in rows:
+                new_uuid = uuid.uuid4().hex
+                db.c.execute(f"UPDATE {table} SET uuid=?, modified_at=? WHERE id=?", (new_uuid, now, row_id))
+        db.conn.commit()
+
     def sync(self):
         if not config.get("sync_enabled", False): return False, "Sync is disabled in settings"
-        self.sync_progress.emit("Starting sync...")
+        self.sync_progress.emit("Starting distributed sync...")
         success, msg = self.setup_repo()
         if not success:
-            self.sync_completed.emit(False, msg); return False, msg
+            self.sync_completed.emit(False, msg)
+            return False, msg
             
-        self.sync_progress.emit("Pulling latest data from GitHub...")
+        self.clean_git_locks()
         import subprocess
+        
+        # 1. PRE-FLIGHT: Prep local DB
+        self.ensure_uuids_and_timestamps()
+        
+        # 2. PULL: Fetch all other devices' JSON files (No conflicts since paths are isolated)
+        self.sync_progress.emit("Pulling cross-platform data...")
         try:
             subprocess.run(['git', 'rebase', '--abort'], cwd=self.repo_path, capture_output=True)
             subprocess.run(['git', 'merge', '--abort'], cwd=self.repo_path, capture_output=True)
-            result = subprocess.run(['git', 'pull', '--rebase'], cwd=self.repo_path, capture_output=True, text=True)
-            if result.returncode != 0:
-                subprocess.run(['git', 'rebase', '--abort'], cwd=self.repo_path, capture_output=True)
-                subprocess.run(['git', 'fetch', 'origin'], cwd=self.repo_path, capture_output=True)
-                subprocess.run(['git', 'reset', '--hard', 'FETCH_HEAD'], cwd=self.repo_path, capture_output=True)
+            pull_res = subprocess.run(['git', 'pull', 'origin', 'HEAD', '--no-rebase', '--strategy-option=theirs'], cwd=self.repo_path, capture_output=True, text=True)
         except Exception as e:
-            self.sync_completed.emit(False, f"Pull exception: {str(e)}"); return False, f"Pull exception: {str(e)}"
+            print("Pull warning:", e)
         
-        self.sync_progress.emit("Merging remote data...")
-        remote_data_path = os.path.join(self.repo_path, self.sync_data_file)
-        if os.path.exists(remote_data_path):
-            try:
-                with open(remote_data_path, 'r') as f: remote_data = json.load(f)
-                self.merge_remote_data(remote_data)
-            except Exception as e:
-                self.sync_completed.emit(False, f"Merge failed: {str(e)}"); return False, f"Merge failed: {str(e)}"
+        # 3. MERGE: Apply remote data to local SQLite DB
+        self.sync_progress.emit("Merging distributed databases...")
+        self.merge_all_remote_data()
         
-        self.sync_progress.emit("Exporting local data...")
+        # 4. EXPORT: Write the newly synced Local DB to this device's specific JSON
+        self.sync_progress.emit("Exporting local state...")
         try:
             local_data = self.export_local_data()
-            with open(os.path.join(self.repo_path, self.sync_data_file), 'w') as f: json.dump(local_data, f, indent=2)
+            export_dir = os.path.join(self.repo_path, self.db_sync_dir)
+            os.makedirs(export_dir, exist_ok=True)
+            file_path = os.path.join(export_dir, f"{self.device_id}.json")
+            
+            with open(file_path, 'w') as f: 
+                json.dump(local_data, f, indent=2)
         except Exception as e:
-            self.sync_completed.emit(False, f"Export failed: {str(e)}"); return False, f"Export failed: {str(e)}"
+            self.sync_completed.emit(False, f"Export failed: {str(e)}")
+            return False, f"Export failed: {str(e)}"
         
-        self.sync_progress.emit("Syncing files...")
+        # 5. SYNC FILES (PDFs/Images)
+        self.sync_progress.emit("Syncing physical files...")
         try: self.sync_files()
         except: pass
         
+        # 6. PUSH: Send this device's JSON back up to GitHub
         self.sync_progress.emit("Pushing to GitHub...")
         try:
+            self.clean_git_locks()
             status_res = subprocess.run(['git', 'status', '--porcelain'], cwd=self.repo_path, capture_output=True, text=True)
             if status_res.stdout.strip():
                 subprocess.run(['git', 'add', '-A'], cwd=self.repo_path)
-                subprocess.run(['git', 'commit', '-m', f"Sync from {self.device_id}"], cwd=self.repo_path)
+                subprocess.run(['git', 'commit', '-m', f"Sync node update from {self.device_id}"], cwd=self.repo_path)
                 push_res = subprocess.run(['git', 'push', 'origin', 'HEAD'], cwd=self.repo_path, capture_output=True, text=True)
+                
+                # Failsafe if another device pushed exactly right now
                 if push_res.returncode != 0:
-                    subprocess.run(['git', 'pull', '--rebase'], cwd=self.repo_path)
+                    subprocess.run(['git', 'pull', 'origin', 'HEAD', '--no-rebase', '--strategy-option=theirs'], cwd=self.repo_path)
                     subprocess.run(['git', 'push', 'origin', 'HEAD'], cwd=self.repo_path)
+                    
         except Exception as e:
-            self.sync_completed.emit(False, f"Push failed: {str(e)}"); return False, f"Push failed: {str(e)}"
+            self.sync_completed.emit(False, f"Push failed: {str(e)}")
+            return False, f"Push failed: {str(e)}"
         
-        self.sync_completed.emit(True, "Sync completed successfully")
-        return True, "Sync completed successfully"
+        self.sync_completed.emit(True, "Distributed Sync completed successfully")
+        return True, "Distributed Sync completed successfully"
 
-    def merge_remote_data(self, remote_data):
+    def merge_all_remote_data(self):
+        """Reads all other devices' JSON exports and applies Last-Write-Wins logic."""
         import sqlite3
-        tables = remote_data.get("tables", {})
+        sync_dir = os.path.join(self.repo_path, self.db_sync_dir)
+        if not os.path.exists(sync_dir): return
         
-        # Determine all current tables dynamically
         db.c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT IN ('sqlite_sequence')")
         valid_tables = [r[0] for r in db.c.fetchall()]
         
-        for table, rows in tables.items():
-            if table not in valid_tables: continue
-            
-            # Check if this table supports UUID merging
-            db.c.execute(f"PRAGMA table_info({table})")
-            columns = [info[1] for info in db.c.fetchall()]
-            if "uuid" not in columns: continue # Skip tables without UUIDs to prevent dupes
+        for filename in os.listdir(sync_dir):
+            # Skip non-JSON or our OWN export file
+            if not filename.endswith('.json') or filename == f"{self.device_id}.json":
+                continue
                 
-            for row in rows:
-                uid = row.get("uuid")
-                if not uid: uid = uuid.uuid4().hex; row["uuid"] = uid
-                db.c.execute(f"SELECT id, modified_at FROM {table} WHERE uuid = ?", (uid,))
-                existing = db.c.fetchone()
-                if existing:
-                    existing_id, existing_mod = existing
-                    incoming_mod = row.get("modified_at", "")
-                    if not existing_mod or (incoming_mod and incoming_mod > existing_mod):
-                        set_clause = ", ".join([f"{k} = ?" for k in row.keys() if k not in ["id", "uuid"]])
-                        values = [row[k] for k in row.keys() if k not in ["id", "uuid"]] + [existing_id]
-                        try: db.c.execute(f"UPDATE {table} SET {set_clause} WHERE id = ?", values)
-                        except sqlite3.IntegrityError: pass
-                else:
-                    row.pop("id", None)
-                    cols = ", ".join(row.keys()); placeholders = ", ".join(["?"] * len(row))
-                    try: db.c.execute(f"INSERT INTO {table} ({cols}) VALUES ({placeholders})", list(row.values()))
-                    except sqlite3.IntegrityError: pass
+            file_path = os.path.join(sync_dir, filename)
+            try:
+                with open(file_path, 'r') as f:
+                    remote_data = json.load(f)
+                
+                # Merge Settings (Last-Write-Wins based on a timestamp)
+                remote_sync_time = remote_data.get("last_sync", "")
+                local_sync_time = config.get("last_sync_timestamp", "")
+                if remote_sync_time and (not local_sync_time or remote_sync_time > local_sync_time):
+                    # Remote settings are newer, apply them
+                    remote_settings = remote_data.get("settings", {})
+                    for k, v in remote_settings.items():
+                        config.set(k, v)
+                    config.set("last_sync_timestamp", remote_sync_time)
+
+                # Merge Tables
+                tables = remote_data.get("tables", {})
+                for table, rows in tables.items():
+                    if table not in valid_tables: continue
+                    
+                    db.c.execute(f"PRAGMA table_info({table})")
+                    columns = [info[1] for info in db.c.fetchall()]
+                    if "uuid" not in columns or "modified_at" not in columns: continue
+                        
+                    for row in rows:
+                        uid = row.get("uuid")
+                        if not uid: continue
+                        
+                        incoming_mod = row.get("modified_at", "")
+                        
+                        db.c.execute(f"SELECT id, modified_at FROM {table} WHERE uuid = ?", (uid,))
+                        existing = db.c.fetchone()
+                        
+                        if existing:
+                            existing_id, existing_mod = existing
+                            # Update if remote data is strictly newer
+                            if not existing_mod or (incoming_mod and incoming_mod > existing_mod):
+                                set_clause = ", ".join([f"{k} = ?" for k in row.keys() if k not in ["id", "uuid"]])
+                                values = [row[k] for k in row.keys() if k not in ["id", "uuid"]] + [existing_id]
+                                try: 
+                                    db.c.execute(f"UPDATE {table} SET {set_clause} WHERE id = ?", values)
+                                except sqlite3.IntegrityError: pass
+                        else:
+                            # Insert entirely new row
+                            row.pop("id", None) # Remove remote ID to prevent PK conflicts
+                            cols = ", ".join(row.keys())
+                            placeholders = ", ".join(["?"] * len(row))
+                            try: 
+                                db.c.execute(f"INSERT INTO {table} ({cols}) VALUES ({placeholders})", list(row.values()))
+                            except sqlite3.IntegrityError: pass
+            except Exception as e:
+                print(f"[SyncManager] Failed to merge node {filename}: {e}")
+                
         db.conn.commit()
     
     def export_local_data(self):
-        settings = config.cfg.copy(); settings.pop("sync_github_token", None)
-        data = {"device_id": self.device_id, "last_sync": datetime.now().isoformat(), "settings": settings, "tables": {}}
+        """Dumps entire SQLite state into this device's JSON payload."""
+        settings = config.cfg.copy()
+        settings.pop("sync_github_token", None) # Never export secrets
         
-        # Dynamically fetch all tables to ensure 100% data export (quizzes, notes, goals, etc)
+        now = datetime.now().isoformat()
+        config.set("last_sync_timestamp", now)
+        
+        data = {
+            "device_id": self.device_id, 
+            "last_sync": now, 
+            "settings": settings, 
+            "tables": {}
+        }
+        
         db.c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT IN ('sqlite_sequence')")
         tables = [r[0] for r in db.c.fetchall()]
         
         for table in tables:
             try:
-                db.c.execute(f"SELECT * FROM {table}"); columns = [desc[0] for desc in db.c.description]
+                db.c.execute(f"SELECT * FROM {table}")
+                columns = [desc[0] for desc in db.c.description]
                 data["tables"][table] = [dict(zip(columns, row)) for row in db.c.fetchall()]
             except: pass
         return data
@@ -217,11 +299,9 @@ class SyncManager(QObject):
                     src = os.path.join(root, f)
                     dst = os.path.join(target_dir, f)
                     try:
-                        # Defensive >50MB tracking to prevent GitHub rejecting the entire sync push
                         file_size_mb = os.path.getsize(src) / (1024 * 1024)
                         if file_size_mb > 95:
-                            print(f"[!] Skipping {f} ({file_size_mb:.1f}MB) - Exceeds safe GH threshold")
-                            continue
+                            continue # Exceeds GitHub safe limits
                         shutil.copy2(src, dst)
                     except: pass
 
@@ -250,11 +330,3 @@ class SyncManager(QObject):
                         "path": dev_path
                     })
         return folders
-    
-    def map_folder(self, local_path):
-        paths = config.get("sync_local_paths", [])
-        if local_path not in paths: paths.append(local_path); config.set("sync_local_paths", paths)
-    
-    def unmap_folder(self, local_path):
-        paths = config.get("sync_local_paths", [])
-        if local_path in paths: paths.remove(local_path); config.set("sync_local_paths", paths)

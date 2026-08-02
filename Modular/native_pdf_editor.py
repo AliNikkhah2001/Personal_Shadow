@@ -89,19 +89,19 @@ class PageWidget(QLabel):
         if tool in ["Highlight", "Underline", "StrikeOut"]:
             # TRUE TEXT HIGHLIGHTING: Intersect box with exact word geometry
             words = page.get_text("words")
-            quads = []
+            highlight_rects = []
             for w in words:
                 w_rect = fitz.Rect(w[:4])
                 if w_rect.intersects(rect_pdf):
-                    quads.append(fitz.Quad(w_rect))
+                    highlight_rects.append(w_rect)
             
-            if quads:
+            if highlight_rects:
                 if tool == "Highlight":
-                    annot = page.add_highlight_annot(quads)
+                    annot = page.add_highlight_annot(highlight_rects)
                 elif tool == "Underline":
-                    annot = page.add_underline_annot(quads)
+                    annot = page.add_underline_annot(highlight_rects)
                 elif tool == "StrikeOut":
-                    annot = page.add_strikeout_annot(quads)
+                    annot = page.add_strikeout_annot(highlight_rects)
                     
                 annot.set_colors(stroke=color)
                 annot.update()
