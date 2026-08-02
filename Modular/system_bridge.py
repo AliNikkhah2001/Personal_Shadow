@@ -22,8 +22,8 @@ except ImportError:
         pymupdf = None
 
 from PyQt6.QtCore import QObject, pyqtSlot, pyqtSignal, QTimer, Qt, QTime, QByteArray, QBuffer, QIODevice, QRectF
-from PyQt6.QtGui import QImage, QPainter, QColor, QBrush, QPen, QFont
-from PyQt6.QtWidgets import QWidget, QApplication, QFileDialog
+from PyQt6.QtGui import QImage, QPainter, QColor, QBrush, QPen, QFont, QPixmap
+from PyQt6.QtWidgets import QWidget, QApplication, QFileDialog, QMainWindow, QToolBar, QScrollArea, QLabel, QInputDialog, QMessageBox, QVBoxLayout
 
 from core_sys import config, db, get_color, GITHUB_TOKEN
 from vision_tracker import VisionTracker
@@ -94,6 +94,155 @@ class OverlayWidget(QWidget):
             p.restore()
         p.setPen(Qt.PenStyle.NoPen); p.setBrush(QBrush(QColor("white"))); p.drawEllipse(-3, -3, 6, 6)
 
+class AdvancedPDFCanvas(QLabel):
+    action_completed = pyqtSignal(str, object, int)
+    def __init__(self, page_num):
+        super().__init__()
+        self.page_num = page_num
+        self.mode = "View"
+        self.start_pt = None
+        self.cur_pt = None
+        self.setCursor(Qt.CursorShape.CrossCursor)
+    def mousePressEvent(self, e):
+        if self.mode != "View" and e.button() == Qt.MouseButton.LeftButton:
+            self.start_pt = e.pos()
+            self.cur_pt = e.pos()
+    def mouseMoveEvent(self, e):
+        if self.start_pt:
+            self.cur_pt = e.pos()
+            self.update()
+    def mouseReleaseEvent(self, e):
+        if self.start_pt and self.cur_pt and e.button() == Qt.MouseButton.LeftButton:
+            if self.mode == "Line": self.action_completed.emit(self.mode, (self.start_pt, self.cur_pt), self.page_num)
+            else:
+                x0, y0 = self.start_pt.x(), self.start_pt.y()
+                x1, y1 = self.cur_pt.x(), self.cur_pt.y()
+                r = QRectF(float(min(x0, x1)), float(min(y0, y1)), float(abs(x1-x0)), float(abs(y1-y0)))
+                if r.width() > 5 and r.height() > 5:
+                    self.action_completed.emit(self.mode, r, self.page_num)
+        self.start_pt = None
+        self.cur_pt = None
+        self.update()
+    def paintEvent(self, e):
+        super().paintEvent(e)
+        if self.start_pt and self.cur_pt:
+            p = QPainter(self)
+            p.setPen(QPen(QColor(0, 150, 255), 2, Qt.PenStyle.DashLine))
+            if self.mode == "Line": p.drawLine(self.start_pt, self.cur_pt)
+            else: 
+                p.setBrush(QColor(0, 150, 255, 50))
+                p.drawRect(QRectF(float(self.start_pt.x()), float(self.start_pt.y()), float(self.cur_pt.x() - self.start_pt.x()), float(self.cur_pt.y() - self.start_pt.y())).normalized())
+
+class AdvancedPDFWindow(QMainWindow):
+    def __init__(self, filepath):
+        super().__init__()
+        self.filepath = filepath
+        self.doc = pymupdf.open(filepath)
+        self.zoom = 2.0
+        self.mode = "View"
+        self.resize(1200, 900)
+        self.setWindowTitle(f"Native Pro Editor - {os.path.basename(self.filepath)}")
+        
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        
+        self.canvas_container = QWidget()
+        self.canvas_container.setStyleSheet("background-color: #0f0f11;")
+        self.layout = QVBoxLayout(self.canvas_container)
+        self.layout.setSpacing(20)
+        self.layout.setContentsMargins(40, 40, 40, 40)
+        
+        self.pages = []
+        for i in range(len(self.doc)):
+            canvas = AdvancedPDFCanvas(i)
+            canvas.action_completed.connect(self.handle_action)
+            self.layout.addWidget(canvas)
+            self.pages.append(canvas)
+            
+        self.scroll_area.setWidget(self.canvas_container)
+        self.setCentralWidget(self.scroll_area)
+        
+        tb = QToolBar("Tools")
+        self.addToolBar(tb)
+        for act in ["View", "Highlight", "Note", "Box", "Line"]:
+            a = tb.addAction(act)
+            a.triggered.connect(lambda ch, m=act: self.set_mode(m))
+        tb.addSeparator()
+        tb.addAction("Zoom In").triggered.connect(lambda: self.set_zoom(self.zoom + 0.5))
+        tb.addAction("Zoom Out").triggered.connect(lambda: self.set_zoom(self.zoom - 0.5))
+        tb.addSeparator()
+        tb.addAction("Screenshot").triggered.connect(self.screenshot)
+        tb.addAction("Bookmark").triggered.connect(self.bookmark)
+        
+        self.render_all_pages()
+        self.setStyleSheet("QMainWindow { background-color: #1e1e2b; } QToolBar { background-color: #282a36; color: white; border: none; padding: 5px; }")
+
+        from PyQt6.QtGui import QShortcut, QKeySequence
+        QShortcut(QKeySequence("Down"), self, lambda: self.scroll_area.verticalScrollBar().setValue(self.scroll_area.verticalScrollBar().value() + 100))
+        QShortcut(QKeySequence("Up"), self, lambda: self.scroll_area.verticalScrollBar().setValue(self.scroll_area.verticalScrollBar().value() - 100))
+        QShortcut(QKeySequence("Right"), self, lambda: self.scroll_area.verticalScrollBar().setValue(self.scroll_area.verticalScrollBar().value() + 600))
+        QShortcut(QKeySequence("Left"), self, lambda: self.scroll_area.verticalScrollBar().setValue(self.scroll_area.verticalScrollBar().value() - 600))
+
+    def set_mode(self, m): 
+        self.mode = m
+        for canvas in self.pages: canvas.mode = m
+        self.statusBar().showMessage(f"Mode: {m}")
+
+    def set_zoom(self, z): 
+        self.zoom = max(0.5, z)
+        self.render_all_pages()
+
+    def render_all_pages(self):
+        for i, canvas in enumerate(self.pages):
+            self.render_single_page(i)
+            
+    def render_single_page(self, page_num):
+        page = self.doc[page_num]
+        mat = pymupdf.Matrix(self.zoom, self.zoom)
+        pix = page.get_pixmap(matrix=mat)
+        fmt = QImage.Format.Format_RGBA8888 if pix.alpha else QImage.Format.Format_RGB888
+        img = QImage(pix.samples, pix.width, pix.height, pix.stride, fmt)
+        self.pages[page_num].setPixmap(QPixmap.fromImage(img))
+        self.pages[page_num].setFixedSize(pix.width, pix.height)
+
+    def handle_action(self, mode, geom, page_num):
+        page = self.doc[page_num]
+        if mode == "Line":
+            p1, p2 = geom
+            annot = page.add_line_annot(pymupdf.Point(p1.x()/self.zoom, p1.y()/self.zoom), pymupdf.Point(p2.x()/self.zoom, p2.y()/self.zoom))
+            annot.set_colors(stroke=(1,0,0)); annot.update()
+        else:
+            rect = pymupdf.Rect(geom.x()/self.zoom, geom.y()/self.zoom, (geom.x()+geom.width())/self.zoom, (geom.y()+geom.height())/self.zoom)
+            if mode == "Highlight":
+                words = page.get_text("words")
+                quads = [pymupdf.Rect(w[:4]) for w in words if pymupdf.Rect(w[:4]).intersects(rect)]
+                if quads:
+                    annot = page.add_highlight_annot(quads)
+                    annot.set_colors(stroke=(1,1,0)); annot.update()
+            elif mode == "Box":
+                annot = page.add_rect_annot(rect)
+                annot.set_colors(stroke=(0,0,1)); annot.update()
+            elif mode == "Note":
+                text, ok = QInputDialog.getMultiLineText(self, "Note", "Enter note text:")
+                if ok and text:
+                    annot = page.add_text_annot(rect.tl, text)
+                    annot.update()
+        self.doc.save(self.doc.name, incremental=True, encryption=pymupdf.PDF_ENCRYPT_KEEP)
+        self.render_single_page(page_num)
+
+    def screenshot(self):
+        path, _ = QFileDialog.getSaveFileName(self, "Save Screenshot", "screenshot.png", "PNG (*.png)")
+        if path: 
+            pix = self.scroll_area.widget().grab()
+            pix.save(path)
+
+    def bookmark(self):
+        db.c.execute("INSERT INTO notes (title, content, course, folder, color, timestamp) VALUES (?, ?, ?, ?, ?, ?)",
+                     (f"Bookmark: {os.path.basename(self.filepath)}", f"Bookmarked {os.path.basename(self.filepath)}", "General", "Bookmarks", "#facc15", datetime.now().isoformat()))
+        db.conn.commit()
+        QMessageBox.information(self, "Bookmark", "Bookmark successfully added to Notes database!")
+
 class SystemBridge(QObject):
     state_update = pyqtSignal(str)
     video_feed = pyqtSignal(str)
@@ -145,6 +294,7 @@ class SystemBridge(QObject):
             
         self.active_pdf = None
         self.active_pdf_name = ""
+        self.pdf_editors = []
 
     def check_auto_scans(self):
         def worker():
@@ -726,78 +876,105 @@ class SystemBridge(QObject):
             db.conn.commit()
             return self.request(json.dumps({"action": "init"}))
 
-        elif action == "lib_list":
-            files = [f for f in os.listdir(self.lib_path) if f.lower().endswith('.pdf')]
-            return json.dumps({"files": files})
-            
-        elif action == "lib_open":
-            if not pymupdf: return json.dumps({"error": "PyMuPDF not installed. Run: pip install pymupdf"})
-            fname = req.get("filename")
-            path = os.path.join(self.lib_path, fname)
+        elif action == "lib_open_native":
             try:
-                if self.active_pdf: self.active_pdf.close()
-                self.active_pdf = pymupdf.open(path)
-                self.active_pdf_name = fname
-                return json.dumps({"status": "ok", "total_pages": len(self.active_pdf)})
+                from native_pdf_editor import NativePDFEditor
+                filepath = os.path.join(self.lib_path, req.get("filename"))
+                if os.path.exists(filepath):
+                    if not hasattr(self, 'pdf_editors'):
+                        self.pdf_editors = []
+                    editor = NativePDFEditor(filepath)
+                    editor.show()
+                    self.pdf_editors.append(editor)
+                    return json.dumps({"status": "opened"})
+                return json.dumps({"error": "File not found"})
             except Exception as e:
-                return json.dumps({"error": str(e)})
-                
+                import traceback
+                print(traceback.format_exc())
+                return json.dumps({"error": f"Native boot failure: {str(e)}"})
+
+    
+        elif action == "lib_list":
+            files = []
+            if os.path.exists(self.lib_path):
+                files = [f for f in os.listdir(self.lib_path) if f.lower().endswith('.pdf')]
+            return json.dumps({"files": files})
+
+        elif action == "lib_open":
+            filename = req.get("filename")
+            path = os.path.join(self.lib_path, filename)
+            if os.path.exists(path):
+                if self.active_pdf:
+                    self.active_pdf.close()
+                self.active_pdf = pymupdf.open(path)
+                self.active_pdf_name = filename
+                return json.dumps({"status": "ok", "total_pages": len(self.active_pdf)})
+            return json.dumps({"error": "File not found"})
+
         elif action == "lib_page":
-            if not self.active_pdf: return json.dumps({"error": "No PDF open"})
             page_num = req.get("page", 0)
             zoom = req.get("zoom", 1.5)
-            if page_num < 0 or page_num >= len(self.active_pdf): return json.dumps({"error": "Invalid page"})
-            
-            page = self.active_pdf[page_num]
-            mat = pymupdf.Matrix(zoom, zoom)
-            pix = page.get_pixmap(matrix=mat)
-            img_b64 = base64.b64encode(pix.tobytes("png")).decode('utf-8')
-            
-            annots = []
-            annot = page.first_annot
-            while annot:
-                info = annot.info
-                annots.append({
-                    "subject": info.get("subject", "Annot"),
-                    "title": info.get("title", "User"),
-                    "content": info.get("content", "")
-                })
-                annot = annot.next
+            if self.active_pdf and 0 <= page_num < len(self.active_pdf):
+                page = self.active_pdf[page_num]
+                mat = pymupdf.Matrix(zoom, zoom)
+                pix = page.get_pixmap(matrix=mat)
                 
-            return json.dumps({"b64": img_b64, "width": pix.width, "height": pix.height, "annots": annots})
-            
+                img_data = pix.tobytes("png")
+                b64 = base64.b64encode(img_data).decode('utf-8')
+                
+                annots = []
+                annot = page.first_annot
+                while annot:
+                    info = annot.info
+                    annots.append({
+                        "subject": info.get("subject", "Unknown"),
+                        "title": info.get("title", ""),
+                        "content": info.get("content", "")
+                    })
+                    annot = annot.next
+                
+                return json.dumps({
+                    "b64": b64,
+                    "width": pix.width,
+                    "height": pix.height,
+                    "annots": annots
+                })
+            return json.dumps({"error": "Invalid page"})
+
         elif action == "lib_annot":
-            if not self.active_pdf: return json.dumps({"error": "No PDF open"})
-            page_num = req.get("page", 0)
-            rect_data = req.get("rect") # [x0, y0, x1, y1]
-            tool = req.get("tool", "Highlight")
+            page_num = req.get("page")
+            rect_coords = req.get("rect")
+            tool = req.get("tool")
             text = req.get("text", "")
             
-            page = self.active_pdf[page_num]
-            r = pymupdf.Rect(*rect_data)
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            device = config.get("device_id", "UnknownDevice")
-            
-            try:
-                if tool == "Highlight":
-                    annot = page.add_highlight_annot(r)
-                    annot.set_colors(stroke=(1, 1, 0))
-                    annot.set_info(info={"title": device, "subject": "Highlight", "content": f"Captured at {timestamp}"})
-                    annot.update()
-                elif tool == "Underline":
-                    annot = page.add_underline_annot(r)
-                    annot.set_colors(stroke=(0, 0.5, 1))
-                    annot.set_info(info={"title": device, "subject": "Underline", "content": f"Captured at {timestamp}"})
-                    annot.update()
+            if self.active_pdf and 0 <= page_num < len(self.active_pdf):
+                page = self.active_pdf[page_num]
+                x0, y0, x1, y1 = rect_coords
+                pdf_rect = pymupdf.Rect(x0, y0, x1, y1)
+                
+                dirty = False
+                if tool in ["Highlight", "Underline"]:
+                    words = page.get_text("words")
+                    quads = [pymupdf.Rect(w[:4]) for w in words if pymupdf.Rect(w[:4]).intersects(pdf_rect)]
+                    if quads:
+                        annot = page.add_highlight_annot(quads) if tool == "Highlight" else page.add_underline_annot(quads)
+                        annot.set_colors(stroke=(1,1,0) if tool == "Highlight" else (0,0,1))
+                        annot.set_info(info={"title": "Web UI", "subject": tool, "content": "Marked via Web UI"})
+                        annot.update()
+                        dirty = True
                 elif tool == "Note":
-                    annot = page.add_text_annot(r.tl, text)
-                    annot.set_info(info={"title": device, "subject": "Note", "content": f"{timestamp}\n{text}"})
+                    annot = page.add_text_annot(pdf_rect.tl, text)
+                    annot.set_info(info={"title": "Web UI", "subject": "Note", "content": text})
                     annot.update()
+                    dirty = True
                     
-                self.active_pdf.save(self.active_pdf.name, incremental=True, encryption=pymupdf.PDF_ENCRYPT_KEEP)
+                if dirty:
+                    try:
+                        self.active_pdf.save(self.active_pdf.name, incremental=True, encryption=pymupdf.PDF_ENCRYPT_KEEP)
+                    except Exception as e:
+                        print(f"Error saving annotation: {e}")
                 return json.dumps({"status": "ok"})
-            except Exception as e:
-                return json.dumps({"error": str(e)})
+            return json.dumps({"error": "Failed to add annotation"})
 
         return json.dumps({"error": "Unknown action"})
 

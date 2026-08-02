@@ -622,8 +622,7 @@
         // ==========================================
         // SOPHISTICATED PDF ENGINE WITH CONTINUOUS SCROLL
         // ==========================================
-        
-        const PdfPage = ({ pageNum, backend, refreshKey, onAnnotate, onRefreshMeta, zoomLevel }) => {
+const PdfPage = ({ pageNum, backend, refreshKey, onAnnotate, onRefreshMeta, zoomLevel }) => {
             const [pageData, setPageData] = useState(null);
             const [pixDim, setPixDim] = useState({w: 1, h: 1, renderZoom: 3.0});
             const [isIntersecting, setIsIntersecting] = useState(false);
@@ -634,7 +633,6 @@
             const [startPos, setStartPos] = useState(null);
             const [currPos, setCurrPos] = useState(null);
 
-            // Lazy loading intersection observer
             useEffect(() => {
                 const observer = new IntersectionObserver(([entry]) => {
                     if (entry.isIntersecting) setIsIntersecting(true);
@@ -643,7 +641,6 @@
                 return () => observer.disconnect();
             }, []);
 
-            // High Quality Fetch
             const fetchPage = () => {
                 const renderZoom = 3.0; // High DPI for crystal clear text
                 backend.request(JSON.stringify({action: 'lib_page', page: pageNum, zoom: renderZoom})).then(res => {
@@ -660,7 +657,6 @@
                 if (isIntersecting) fetchPage();
             }, [isIntersecting, refreshKey]);
 
-            // Annotation Drawing Tracking
             const handleMouseDown = (e) => {
                 if (!imgRef.current) return;
                 const rect = imgRef.current.getBoundingClientRect();
@@ -724,7 +720,7 @@
             const [activeFile, setActiveFile] = useState(null);
             const [totalPages, setTotalPages] = useState(0);
             const [tool, setTool] = useState("Highlight");
-            const [zoomLevel, setZoomLevel] = useState(1.0); // CSS Zoom for width scaling
+            const [zoomLevel, setZoomLevel] = useState(1.0);
             const [isFullscreen, setIsFullscreen] = useState(false);
             const [currentPageDisplay, setCurrentPageDisplay] = useState(1);
             
@@ -733,7 +729,7 @@
 
             // Markdown Note Modal State
             const [showNoteModal, setShowNoteModal] = useState(false);
-            const [pendingAnnot, setPendingAnnot] = useState(null); // { page, rect }
+            const [pendingAnnot, setPendingAnnot] = useState(null);
             const [noteContent, setNoteContent] = useState("");
             const [notePreview, setNotePreview] = useState(false);
             const noteTextareaRef = useRef(null);
@@ -794,7 +790,6 @@
             const handleScroll = (e) => {
                 const container = e.target;
                 const scrollPosition = container.scrollTop;
-                // Approximate current page based on scroll height
                 const avgPageHeight = container.scrollHeight / totalPages;
                 const current = Math.floor(scrollPosition / avgPageHeight);
                 setCurrentPageDisplay(Math.max(1, Math.min(totalPages, current + 1)));
@@ -828,11 +823,17 @@
                                 </div>
                                 <div className="flex gap-2 items-center">
                                     <span className="text-[10px] font-bold text-blue-400 border border-blue-500/30 px-3 py-1 rounded bg-black/50">Pg {currentPageDisplay} of {totalPages}</span>
+                                    
+                                    <button onClick={() => {
+                                        if (activeFile) backend.request(JSON.stringify({action: 'lib_open_native', filename: activeFile}));
+                                    }} className="px-3 py-1.5 rounded bg-purple-600/50 hover:bg-purple-600 text-white text-[10px] font-bold tracking-widest uppercase border border-purple-500/50 transition shadow-lg ml-2">
+                                        <i className="fas fa-external-link-alt mr-1"></i> Native Editor
+                                    </button>
+
                                     <button onClick={() => setIsFullscreen(!isFullscreen)} className="px-3 py-1.5 rounded bg-white/10 hover:bg-white/20 text-white text-xs ml-2"><i className={`fas ${isFullscreen ? 'fa-compress' : 'fa-expand'}`}></i></button>
                                 </div>
                             </div>
                             
-                            {/* INFINITE SCROLL CONTAINER */}
                             <div className="flex-grow overflow-auto bg-black/60 flex flex-col items-center custom-scrollbar relative p-4 text-center" onScroll={handleScroll}>
                                 {activeFile ? (
                                     Array.from({ length: totalPages }).map((_, idx) => (
@@ -871,7 +872,6 @@
                         )}
                     </div>
 
-                    {/* Markdown Annotation Modal */}
                     {showNoteModal && (
                         <div className="fixed inset-0 bg-black/90 z-[150] flex items-center justify-center p-4 backdrop-blur-md">
                             <div className="glass-panel p-6 w-full max-w-4xl h-[80vh] flex flex-col gap-4 fade-in border border-blue-500/50">
