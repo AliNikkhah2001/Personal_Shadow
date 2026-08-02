@@ -802,58 +802,64 @@ class SystemBridge(QObject):
         return json.dumps({"error": "Unknown action"})
 
     def emit_clock(self):
-        img = QImage(300, 300, QImage.Format.Format_ARGB32_Premultiplied)
-        img.fill(Qt.GlobalColor.transparent)
-        p = QPainter(img)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        
-        radius = 120
-        p.translate(150, 150)
-        
-        s = config.get("clock_style", "Analog Classic")
-        h_style = config.get("clock_hands", "Classic")
-        comp = config.get("clock_complication", "None")
-        
-        if "Minimal" in s:
-            bg_col = QColor(0,0,0,80)
-            hand_col = QColor("white")
-        elif "Neon" in s:
-            bg_col = QColor(10,132,255,50)
-            hand_col = QColor("white")
-        else:
-            bg_col = QColor(15, 15, 17, 220)
-            hand_col = QColor("white")
+        try:
+            img = QImage(300, 300, QImage.Format.Format_ARGB32_Premultiplied)
+            img.fill(Qt.GlobalColor.transparent)
+            p = QPainter(img)
+            p.setRenderHint(QPainter.RenderHint.Antialiasing)
             
-        draw_clock_face(p, radius, bg_col)
-        draw_clock_ticks_and_indices(p, radius)
-        draw_clock_complications(p, radius)
+            radius = 120
+            p.translate(150, 150)
             
-        t = QTime.currentTime()
-        
-        p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QBrush(hand_col))
-        
-        p.save(); p.rotate(30.0 * (t.hour() + t.minute()/60.0)); draw_horological_hand(p, h_style, 60, 4, True); p.restore()
-        p.save(); p.rotate(6.0 * (t.minute() + t.second()/60.0)); draw_horological_hand(p, h_style, 90, 3, False); p.restore()
-        
-        sec_col = QColor("#0a84ff")
-        if comp == "Small Seconds":
-            p.save(); p.translate(0, int(radius - 40)); p.setBrush(QBrush(sec_col)); p.setPen(QPen(sec_col, 1)); p.rotate(6.0 * t.second()); p.drawLine(0, 0, 0, -15); p.restore()
-        else:
-            p.setBrush(QBrush(sec_col)); p.setPen(QPen(sec_col, 2)); p.save(); p.rotate(6.0 * t.second())
-            if h_style in ["Serpentine", "Sword", "Arrow"]: draw_horological_hand(p, h_style, 100, 1, False)
-            else: p.setPen(Qt.PenStyle.NoPen); p.drawRect(-1, 0, 2, -100)
-            p.restore()
-        
-        p.setPen(Qt.PenStyle.NoPen); p.setBrush(QBrush(QColor("white"))); p.drawEllipse(-4, -4, 8, 8)
-        p.end()
-        
-        buf = QByteArray()
-        buffer = QBuffer(buf)
-        buffer.open(QIODevice.OpenModeFlag.WriteOnly)
-        img.save(buffer, "PNG")
-        b64 = base64.b64encode(buf.data()).decode('utf-8')
-        self.clock_feed.emit(f"data:image/png;base64,{b64}")
+            s = config.get("clock_style", "Analog Classic")
+            h_style = config.get("clock_hands", "Classic")
+            comp = config.get("clock_complication", "None")
+            
+            if "Minimal" in s:
+                bg_col = QColor(0,0,0,80)
+                hand_col = QColor("white")
+            elif "Neon" in s:
+                bg_col = QColor(10,132,255,50)
+                hand_col = QColor("white")
+            else:
+                bg_col = QColor(15, 15, 17, 220)
+                hand_col = QColor("white")
+                
+            draw_clock_face(p, radius, bg_col)
+            draw_clock_ticks_and_indices(p, radius)
+            draw_clock_complications(p, radius)
+                
+            t = QTime.currentTime()
+            
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QBrush(hand_col))
+            
+            p.save(); p.rotate(30.0 * (t.hour() + t.minute()/60.0)); draw_horological_hand(p, h_style, 60, 4, True); p.restore()
+            p.save(); p.rotate(6.0 * (t.minute() + t.second()/60.0)); draw_horological_hand(p, h_style, 90, 3, False); p.restore()
+            
+            sec_col = QColor("#0a84ff")
+            if comp == "Small Seconds":
+                p.save(); p.translate(0, int(radius - 40)); p.setBrush(QBrush(sec_col)); p.setPen(QPen(sec_col, 1)); p.rotate(6.0 * t.second()); p.drawLine(0, 0, 0, -15); p.restore()
+            else:
+                p.setBrush(QBrush(sec_col)); p.setPen(QPen(sec_col, 2)); p.save(); p.rotate(6.0 * t.second())
+                if h_style in ["Serpentine", "Sword", "Arrow"]: draw_horological_hand(p, h_style, 100, 1, False)
+                else: p.setPen(Qt.PenStyle.NoPen); p.drawRect(-1, 0, 2, -100)
+                p.restore()
+            
+            p.setPen(Qt.PenStyle.NoPen); p.setBrush(QBrush(QColor("white"))); p.drawEllipse(-4, -4, 8, 8)
+            p.end()
+            
+            buf = QByteArray()
+            buffer = QBuffer(buf)
+            buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+            img.save(buffer, "PNG")
+            
+            # Robust bytes extraction to prevent PyQt6 silent crashes
+            raw_bytes = bytes(buf) if hasattr(buf, '__bytes__') else bytes(buf.data())
+            b64 = base64.b64encode(raw_bytes).decode('utf-8')
+            self.clock_feed.emit(f"data:image/png;base64,{b64}")
+        except Exception as e:
+            print(f"Horology render failed: {e}")
 
     def push_state(self, dist_mode="None"):
         mins, secs = divmod(self.time_left, 60)
