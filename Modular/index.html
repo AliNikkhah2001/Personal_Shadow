@@ -43,6 +43,7 @@
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 3px; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
         .fade-in { animation: fadeIn 0.3s ease-in-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
         .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
@@ -66,6 +67,7 @@
             { id: 'habits', type: 'HabitsWidget', size: 'half', visible: true, order: 4 },
             { id: 'metrics', type: 'MetricsWidget', size: 'half', visible: true, order: 5 },
             { id: 'architecture', type: 'ArchitectureWidget', size: 'full', visible: true, order: 6 },
+            { id: 'health_trends', type: 'HealthTrends', size: 'full', visible: true, order: 7 }
         ];
 
         const NativeGitHubMatrix = ({ heatmap }) => {
@@ -82,7 +84,6 @@
                     <h3 className="text-gray-300 text-sm font-semibold tracking-wide mb-4 border-b border-white/10 pb-2">Contribution Matrix</h3>
                     <div className="flex-grow flex items-center justify-center overflow-x-auto">
                         <div className="flex gap-1.5 pb-2">
-                            {/* Perfectly aligned 7-day labels matching the 7 rows */}
                             <div className="flex flex-col gap-1.5 pr-2 text-[9px] text-gray-500 font-bold">
                                 {['Mon', '', 'Wed', '', 'Fri', '', 'Sun'].map((day, i) => (
                                     <div key={i} className="h-3.5 sm:h-4 flex items-center justify-end w-4">{day}</div>
@@ -244,25 +245,37 @@
             );
         };
 
-        const DashboardArchitectureWidget = ({ goals }) => {
+        const DashboardArchitectureWidget = ({ goals, studiedHours }) => {
             const sortedGoals = goals ? [...goals].filter(g => g.deadline).sort((a,b) => new Date(a.deadline) - new Date(b.deadline)) : [];
             const now = new Date();
             const upcomingGoals = sortedGoals.filter(g => new Date(g.deadline) >= now);
             return (
                 <div className="p-4 h-full flex flex-col w-full overflow-y-auto">
-                    <h3 className="text-gray-300 font-bold uppercase tracking-widest text-sm border-b border-white/10 pb-2 mb-4">Upcoming Deadlines <span className="text-[10px] text-gray-500 ml-2">({upcomingGoals.length})</span></h3>
+                    <h3 className="text-gray-300 font-bold uppercase tracking-widest text-sm border-b border-white/10 pb-2 mb-4">Upcoming Deadlines & Goals <span className="text-[10px] text-gray-500 ml-2">({upcomingGoals.length})</span></h3>
                     {sortedGoals.length === 0 ? (
                         <div className="text-center text-gray-500 py-8"><i className="fas fa-calendar-plus text-3xl mb-2 opacity-50"></i><p className="text-xs">No goals set</p></div>
                     ) : (
                         upcomingGoals.slice(0, 5).map(g => {
                             const daysUntil = Math.ceil((new Date(g.deadline) - now) / (1000 * 60 * 60 * 24));
+                            const logged = studiedHours && studiedHours[g.title] ? studiedHours[g.title] : 0;
+                            const rem = Math.max(0, (g.target_hours || 0) - logged);
+                            
                             return (
-                                <div key={g.id} className="flex justify-between items-center p-2 bg-white/5 rounded border border-white/5 hover:bg-white/10 transition mb-2">
-                                    <span className="text-xs font-bold text-gray-200">{g.title}</span>
-                                    <div className="flex items-center gap-2">
-                                        <span className={`text-[10px] font-mono ${daysUntil <= 1 ? 'text-red-400' : 'text-yellow-400'}`}>{daysUntil <= 0 ? '🔴 Today!' : `${daysUntil}d`}</span>
-                                        <span className="text-[10px] text-gray-500">{g.deadline.split(' ')[0]}</span>
+                                <div key={g.id} className="flex flex-col p-3 bg-white/5 rounded border border-white/5 hover:bg-white/10 transition mb-2">
+                                    <div className="flex justify-between items-center mb-1">
+                                        <span className="text-xs font-bold text-gray-200">{g.title}</span>
+                                        <div className="flex items-center gap-2">
+                                            <span className={`text-[10px] font-bold ${daysUntil <= 1 ? 'text-red-400' : 'text-yellow-400'}`}>{daysUntil <= 0 ? '🔴 Today!' : `${daysUntil}d left`}</span>
+                                        </div>
                                     </div>
+                                    {g.target_hours > 0 && (
+                                        <div className="flex justify-between items-center mt-1">
+                                            <div className="flex-grow h-1.5 bg-black/50 rounded-full overflow-hidden mr-3">
+                                                <div className="h-full bg-blue-500 rounded-full" style={{width: `${Math.min(100, (logged/g.target_hours)*100)}%`}}></div>
+                                            </div>
+                                            <span className="text-[9px] text-gray-400 font-mono">{rem.toFixed(1)}h rem</span>
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })
@@ -271,7 +284,69 @@
             );
         };
 
-        const DashboardView = ({ layout, setLayout, goals, isEditingLayout, setIsEditingLayout, clockFeed, heatmap, habits, habitLogs, metrics, backend, refreshGoals, healthProfile }) => {
+        const DashboardHealthWidget = ({ healthProfile, healthLogs }) => {
+            const chartRef = useRef(null);
+            
+            useEffect(() => {
+                if (chartRef.current && window.Chart) {
+                    const ctx = chartRef.current.getContext('2d');
+                    
+                    const dailyStats = {};
+                    (healthLogs || []).forEach(l => {
+                        if (!dailyStats[l.date]) dailyStats[l.date] = { intake: 0, burn: 0 };
+                        if (l.type === 'food') dailyStats[l.date].intake += (parseFloat(l.data.kcal) || 0);
+                        if (l.type === 'exercise') dailyStats[l.date].burn += (parseFloat(l.data.kcal_burn) || 0);
+                    });
+                    
+                    const sortedDates = Object.keys(dailyStats).sort();
+                    const bmr = (healthProfile && healthProfile.weight) ? ((10 * healthProfile.weight) + (6.25 * healthProfile.height) - (5 * healthProfile.age) + (healthProfile.gender === 'Male' ? 5 : -161)) : 0;
+                    const tdee = bmr * (healthProfile?.activity || 1.2);
+                    
+                    const deficits = sortedDates.map(d => (tdee + dailyStats[d].burn) - dailyStats[d].intake);
+                    let projWeight = healthProfile?.weight || 70;
+                    const projWeights = sortedDates.map((d, i) => {
+                        projWeight -= (deficits[i] / 7700);
+                        return projWeight;
+                    });
+
+                    let chartInstance = new window.Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: sortedDates.length > 0 ? sortedDates : [new Date().toISOString().slice(0, 10)],
+                            datasets: [{
+                                label: 'Proj. Weight (kg)',
+                                data: projWeights.length > 0 ? projWeights : [healthProfile?.weight || 70],
+                                borderColor: '#3b82f6', tension: 0.3, yAxisID: 'y'
+                            }, {
+                                type: 'bar',
+                                label: 'Deficit (kcal)',
+                                data: deficits.length > 0 ? deficits : [0],
+                                backgroundColor: '#22c55e', yAxisID: 'y1'
+                            }]
+                        },
+                        options: {
+                            responsive: true, maintainAspectRatio: false,
+                            scales: {
+                                y: { type: 'linear', position: 'left', ticks: {color: 'gray'} },
+                                y1: { type: 'linear', position: 'right', ticks: {color: 'gray'}, grid: {drawOnChartArea: false} },
+                                x: { ticks: {color: 'gray'} }
+                            },
+                            plugins: { legend: { labels: {color: 'white', boxWidth: 12, font: {size: 10}} } }
+                        }
+                    });
+                    return () => chartInstance.destroy();
+                }
+            }, [healthLogs, healthProfile]);
+            
+            return (
+                <div className="p-4 h-full flex flex-col w-full relative">
+                    <h3 className="text-gray-300 font-bold uppercase tracking-widest text-sm border-b border-white/10 pb-2 mb-4">Health Trends</h3>
+                    <div className="flex-grow relative min-h-[150px]"><canvas ref={chartRef}></canvas></div>
+                </div>
+            );
+        };
+
+        const DashboardView = ({ layout, setLayout, goals, isEditingLayout, setIsEditingLayout, clockFeed, heatmap, habits, habitLogs, metrics, backend, refreshGoals, healthProfile, healthLogs, studiedHours }) => {
             const toggleWidgetVisibility = (id) => setLayout(prev => prev.map(w => w.id === id ? { ...w, visible: !w.visible } : w));
             const toggleWidgetSize = (id) => setLayout(prev => prev.map(w => w.id === id ? { ...w, size: w.size === 'full' ? 'half' : 'full' } : w));
             
@@ -283,7 +358,8 @@
                     case 'GitHubMatrix': return <NativeGitHubMatrix heatmap={heatmap} />;
                     case 'HabitsWidget': return <DashboardHabitWidget habits={habits} habitLogs={habitLogs} />;
                     case 'MetricsWidget': return <MetricsWidget metrics={metrics} />;
-                    case 'ArchitectureWidget': return <DashboardArchitectureWidget goals={goals} />;
+                    case 'ArchitectureWidget': return <DashboardArchitectureWidget goals={goals} studiedHours={studiedHours} />;
+                    case 'HealthTrends': return <DashboardHealthWidget healthProfile={healthProfile} healthLogs={healthLogs} />;
                     default: return null;
                 }
             };
@@ -331,11 +407,24 @@
             );
         };
 
-        const ProductivityHubView = ({ backend, timerState, camFeed, flatGoals, queue, refreshQueue, settings }) => {
+        const ProductivityHubView = ({ backend, timerState, camFeed, flatGoals, queue, refreshQueue, settings, todaySessions }) => {
             const [dur, setDur] = useState(25); const [crs, setCrs] = useState(""); const [type, setType] = useState("Work");
             const [editingId, setEditingId] = useState(null); const [activeTab, setActiveTab] = useState("timeline");
             const [showProcessList, setShowProcessList] = useState(false); const [selectedProcesses, setSelectedProcesses] = useState([]);
             const [isPaused, setIsPaused] = useState(false);
+            
+            const timelineContainerRef = useRef(null);
+
+            // Auto-scroll the timeline to the current time on load
+            useEffect(() => {
+                if (timelineContainerRef.current) {
+                    const now = new Date();
+                    const mins = now.getHours() * 60 + now.getMinutes();
+                    // 2 pixels per minute. Center the current time in the viewport.
+                    const scrollTarget = (mins * 2) - (timelineContainerRef.current.clientWidth / 2);
+                    timelineContainerRef.current.scrollLeft = Math.max(0, scrollTarget);
+                }
+            }, [todaySessions]);
 
             const startFocusSession = () => {
                 if (!backend) return;
@@ -374,6 +463,21 @@
                 else { startFocusSession(); }
             };
 
+            const renderTimelineHours = () => {
+                const hours = [];
+                for (let i = 0; i <= 24; i++) {
+                    hours.push(
+                        <div key={`hr-${i}`} className="absolute top-0 bottom-0 border-l border-white/10 flex flex-col justify-between py-1" style={{ left: `${i * 120}px` }}>
+                            <span className="text-[10px] text-gray-500 font-bold pl-1 -translate-x-1/2 bg-black/50 px-1 rounded">{i.toString().padStart(2, '0')}:00</span>
+                        </div>
+                    );
+                }
+                return hours;
+            };
+
+            const nowMins = new Date().getHours() * 60 + new Date().getMinutes();
+            let futureStartMins = nowMins;
+
             return (
                 <div className="h-full flex flex-col fade-in">
                     <div className="flex justify-between items-center mb-4 shrink-0"><h2 className="text-2xl font-serif font-bold text-white tracking-widest uppercase drop-shadow-md">Focus Hub</h2></div>
@@ -384,7 +488,7 @@
 
                     {activeTab === 'timeline' && (
                         <div className="flex flex-col flex-grow overflow-hidden">
-                            <div className="flex flex-wrap items-center gap-3 mb-4 w-full glass-panel p-3 shrink-0 bg-black/40">
+                            <div className="flex flex-wrap items-center gap-3 mb-4 w-full glass-panel p-3 shrink-0 bg-black/40 z-10">
                                 <select className="glass-input px-3 py-1.5 rounded text-xs font-bold uppercase w-48" value={crs} onChange={e => setCrs(e.target.value)}><option value="">General</option>{flatGoals && flatGoals.map(c => <option key={c} value={c}>{c}</option>)}</select>
                                 <input type="number" className="glass-input px-3 py-1.5 rounded text-xs font-bold uppercase w-20" value={dur} onChange={e => setDur(parseInt(e.target.value))} />
                                 <select className="glass-input px-3 py-1.5 rounded text-xs font-bold uppercase w-28" value={type} onChange={e => setType(e.target.value)}><option>Work</option><option>Break</option></select>
@@ -396,73 +500,127 @@
                                 <button onClick={() => handleAction('clear')} className="glass-button px-5 py-1.5 rounded text-[11px] font-bold text-red-300 uppercase ml-auto">Clear All</button>
                             </div>
 
-                            <div className="glass-panel flex-grow rounded-xl relative p-6 flex flex-col gap-6 overflow-hidden bg-black/20">
-                                <div className="flex-grow rounded-lg overflow-y-auto">
-                                    <div className="flex flex-col gap-1.5">
+                            <div className="flex flex-col lg:flex-row gap-4 flex-grow overflow-hidden">
+                                <div className="glass-panel rounded-xl flex flex-col p-6 w-full lg:w-2/3 bg-black/20 overflow-hidden">
+                                    <div className="flex justify-between items-end shrink-0 mb-6">
+                                        <div className={`text-6xl lg:text-7xl font-mono font-bold tracking-widest drop-shadow-lg ${timerState.is_running ? 'text-blue-400' : isPaused ? 'text-yellow-400' : 'text-gray-300'}`}>{timerState.time_str || "25:00"}</div>
+                                        <div className="flex gap-3">
+                                            <button onClick={toggleTimer} className={`px-6 py-4 rounded-lg text-xs font-bold tracking-widest text-white uppercase shadow-lg transition-colors ${timerState.is_running ? 'bg-yellow-600/50 hover:bg-yellow-600 border border-yellow-500/50' : 'bg-green-600/50 hover:bg-green-600 border border-green-500/50'}`}><i className={`fas ${timerState.is_running ? 'fa-pause' : 'fa-play'} mr-2`}></i>{timerState.is_running ? 'Pause' : 'Start'}</button>
+                                            <button onClick={() => { if (timerState.is_running) { backend.request(JSON.stringify({action: 'stop_timer'})); setIsPaused(false); } }} className="px-6 py-4 rounded-lg text-xs font-bold tracking-widest text-white uppercase bg-red-600/50 hover:bg-red-600 border border-red-500/50 shadow-lg transition-colors"><i className="fas fa-stop mr-2"></i> Stop</button>
+                                        </div>
+                                    </div>
+                                    
+                                    {/* 24-HOUR ABSOLUTE TIMELINE */}
+                                    <h3 className="text-gray-400 text-[10px] font-bold tracking-widest uppercase mb-2">Absolute Daily Timeline (00:00 - 24:00)</h3>
+                                    <div ref={timelineContainerRef} className="w-full h-36 bg-black/60 border border-white/10 rounded-xl overflow-x-auto custom-scrollbar relative shadow-inner shrink-0 cursor-ew-resize">
+                                        <div className="absolute top-0 left-0 h-full" style={{ width: '2880px' }}>
+                                            {renderTimelineHours()}
+                                            
+                                            {/* Current Time Line */}
+                                            <div className="absolute top-0 bottom-0 w-0.5 bg-blue-500 shadow-[0_0_10px_#3b82f6] z-50" style={{ left: `${nowMins * 2}px` }}>
+                                                <div className="absolute -top-1 -translate-x-1/2 w-3 h-3 bg-blue-500 rounded-full"></div>
+                                            </div>
+
+                                            {/* Plotted Past Sessions */}
+                                            {todaySessions.map((s, i) => {
+                                                const end = new Date(s.timestamp);
+                                                const endMins = end.getHours() * 60 + end.getMinutes();
+                                                const duration = s.actual_duration || s.duration;
+                                                const startMins = endMins - duration;
+                                                
+                                                return (
+                                                    <div key={`past-${i}`} className="absolute top-10 h-14 rounded-md shadow-md flex items-center justify-center overflow-hidden border border-white/20 group" 
+                                                         style={{ left: `${startMins * 2}px`, width: `${duration * 2}px`, backgroundColor: getTaskColor(s.course, s.type === 'Break') }}>
+                                                        <span className="text-[9px] font-bold text-white drop-shadow-md truncate px-1 opacity-0 group-hover:opacity-100 transition-opacity">{s.course}</span>
+                                                        {s.distraction_data && s.distraction_data.map((d, di) => (
+                                                            <div key={di} className="absolute top-0 h-full bg-red-500/80 z-10" style={{ left: `${(d[0] / duration) * 100}%`, width: `${(d[1] / duration) * 100}%` }}></div>
+                                                        ))}
+                                                    </div>
+                                                );
+                                            })}
+
+                                            {/* Active Session Pulsing Block */}
+                                            {timerState.is_running && (
+                                                <div className="absolute top-10 h-14 rounded-md shadow-[0_0_15px_rgba(255,255,255,0.3)] flex items-center justify-center overflow-hidden border-2 border-white/50 animate-pulse" 
+                                                     style={{ left: `${(nowMins - (timerState.total_time - timerState.time_left)/60) * 2}px`, width: `${(timerState.total_time / 60) * 2}px`, backgroundColor: getTaskColor(timerState.course, false) }}>
+                                                     <span className="text-[10px] font-bold text-white drop-shadow-md z-10">{timerState.course}</span>
+                                                </div>
+                                            )}
+                                            
+                                            {/* Future Queue Blocks */}
+                                            {queue.filter(q => q.status !== 'completed').map((q, i) => {
+                                                if (i === 0 && timerState.is_running) return null; // Don't draw the active one twice
+                                                const start = futureStartMins;
+                                                futureStartMins += q.duration;
+                                                return (
+                                                    <div key={`q-${q.id}`} className="absolute top-10 h-14 rounded-md flex items-center justify-center overflow-hidden border border-white/10 opacity-50" 
+                                                         style={{ left: `${start * 2}px`, width: `${q.duration * 2}px`, backgroundColor: getTaskColor(q.course, q.type === 'Break') }}>
+                                                        <span className="text-[9px] font-bold text-white drop-shadow-md truncate px-1">{q.duration}m</span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                    
+                                    {/* History Log below Timeline */}
+                                    <div className="flex-grow mt-6 bg-black/30 rounded-xl border border-white/10 p-4 overflow-y-auto">
+                                        <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest border-b border-white/10 pb-2 mb-3">Today's Completed Blocks</h3>
+                                        <div className="flex flex-col gap-2">
+                                            {todaySessions.length === 0 && <div className="text-gray-500 text-xs italic">No blocks completed today.</div>}
+                                            {todaySessions.slice().reverse().map(s => (
+                                                <div key={s.id} className="flex justify-between items-center p-3 bg-black/60 border border-white/5 rounded-lg hover:bg-white/5 transition">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="w-4 h-4 rounded-full shadow-lg" style={{backgroundColor: getTaskColor(s.course, s.type === 'Break')}}></div>
+                                                        <div className="flex flex-col">
+                                                            <span className="text-sm font-bold text-white">{s.course} <span className="text-gray-400 text-xs font-normal">({s.actual_duration || s.duration}m)</span></span>
+                                                            <span className="text-[10px] text-gray-500 font-mono tracking-wider">Ended at {new Date(s.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-6">
+                                                        <div className="flex flex-col items-end">
+                                                            <span className="text-xs font-bold text-red-400"><i className="fas fa-exclamation-triangle mr-1"></i> {s.distractions} Distracts</span>
+                                                            <span className="text-[10px] text-gray-500">{s.distraction_data ? s.distraction_data.length : 0} detailed logs</span>
+                                                        </div>
+                                                        {s.timelapse_path && s.type === 'Work' && (
+                                                            <button onClick={() => backend.request(JSON.stringify({action: 'play_timelapse', path: s.timelapse_path, duration: s.duration, distractions: s.distractions, data: s}))} 
+                                                                    className="w-10 h-10 rounded-full bg-blue-600/30 hover:bg-blue-600 text-white flex items-center justify-center transition border border-blue-500/50 shadow-[0_0_10px_rgba(59,130,246,0.3)]">
+                                                                <i className="fas fa-play text-sm ml-1"></i>
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Up Next Sidebar */}
+                                <div className="glass-panel rounded-xl flex flex-col p-4 w-full lg:w-1/3 bg-black/20 overflow-y-auto">
+                                    <h3 className="text-gray-400 text-[10px] font-bold tracking-widest uppercase mb-4 border-b border-white/10 pb-2">Up Next in Queue</h3>
+                                    <div className="flex flex-col gap-2">
                                         {queue && queue.map(q => {
                                             const isActive = timerState.active_queue_id === q.id;
                                             const isCompleted = q.status === 'completed';
                                             return (
-                                                <div key={q.id} className={`flex items-center justify-between p-3 rounded-lg transition group border ${isActive ? 'bg-blue-600/20 border-blue-500/40 shadow-[inset_0_0_15px_rgba(59,130,246,0.2)]' : isCompleted ? 'bg-black/40 border-white/5 opacity-50' : 'bg-white/5 hover:bg-white/10 border-white/5'}`}>
-                                                    <span className={`text-xs font-medium ${isActive ? 'text-white font-bold' : isCompleted ? 'line-through text-gray-500' : 'text-gray-400 group-hover:text-gray-200'}`}>
-                                                        [{q.type}] {q.course} ({q.duration}m)
-                                                    </span>
-                                                    {isActive && timerState.is_running && (
-                                                        <span className="text-[10px] text-red-400 font-bold ml-2"><i className="fas fa-exclamation-triangle mr-1"></i> {timerState.distractions} Distractions</span>
-                                                    )}
+                                                <div key={q.id} className={`flex flex-col p-3 rounded-lg transition group border ${isActive ? 'bg-blue-600/20 border-blue-500/40 shadow-[inset_0_0_15px_rgba(59,130,246,0.2)]' : isCompleted ? 'bg-black/40 border-white/5 opacity-50' : 'bg-white/5 hover:bg-white/10 border-white/5'}`}>
+                                                    <div className="flex justify-between items-center mb-1">
+                                                        <span className={`text-sm ${isActive ? 'text-white font-bold' : isCompleted ? 'line-through text-gray-500' : 'text-gray-300 font-bold group-hover:text-white'}`}>
+                                                            [{q.type}] {q.course}
+                                                        </span>
+                                                        <span className="text-xs font-mono text-gray-400">{q.duration}m</span>
+                                                    </div>
+                                                    
                                                     {!isActive && !isCompleted && (
-                                                        <div className="flex gap-5 opacity-50 group-hover:opacity-100 transition">
-                                                            <button onClick={() => {setEditingId(q.id); setCrs(q.course); setDur(q.duration); setType(q.type);}} className="text-[10px] font-bold text-gray-400 hover:text-yellow-400 uppercase tracking-widest">Edit</button>
-                                                            <button onClick={() => handleAction('delete', {id: q.id})} className="text-[10px] font-bold text-gray-400 hover:text-red-400 uppercase tracking-widest">- Remove</button>
+                                                        <div className="flex justify-end gap-4 opacity-0 group-hover:opacity-100 transition mt-2">
+                                                            <button onClick={() => {setEditingId(q.id); setCrs(q.course); setDur(q.duration); setType(q.type);}} className="text-[10px] font-bold text-gray-400 hover:text-yellow-400 uppercase tracking-widest"><i className="fas fa-edit mr-1"></i>Edit</button>
+                                                            <button onClick={() => handleAction('delete', {id: q.id})} className="text-[10px] font-bold text-gray-400 hover:text-red-400 uppercase tracking-widest"><i className="fas fa-trash mr-1"></i>Remove</button>
                                                         </div>
                                                     )}
-                                                    {isCompleted && (
-                                                        <span className="text-[10px] text-green-500 font-bold uppercase tracking-widest">Done</span>
-                                                    )}
+                                                    {isCompleted && <span className="text-[10px] text-green-500 font-bold uppercase tracking-widest text-right mt-1">Done</span>}
                                                 </div>
                                             );
                                         })}
-                                    </div>
-                                </div>
-
-                                <div className="w-full flex flex-col shrink-0 mt-2">
-                                    <div className="w-full h-8 bg-black/60 rounded-md flex overflow-hidden border border-white/10 relative p-1 gap-1">
-                                        {queue && queue.length > 0 ? queue.map((q, i) => {
-                                            const bg = getTaskColor(q.course, q.type === 'Break');
-                                            const isCompleted = q.status === 'completed';
-                                            const isActive = timerState.active_queue_id === q.id;
-                                            return (
-                                                <div key={q.id} style={{flex: q.duration, backgroundColor: bg}} className={`relative rounded-sm flex items-center justify-center overflow-hidden transition-all ${isCompleted ? 'opacity-20 grayscale' : isActive ? 'opacity-100 shadow-[inset_0_0_10px_rgba(255,255,255,0.5)]' : 'opacity-80'}`}>
-                                                    <span className="text-[10px] font-bold text-white drop-shadow-md z-10">{q.duration}m</span>
-                                                    {isActive && timerState.distraction_markers && timerState.distraction_markers.map((d, di) => (
-                                                        <div key={di} className="absolute top-0 w-1 h-full bg-red-500 shadow-[0_0_8px_red] z-0" style={{left: `${d}%`}}></div>
-                                                    ))}
-                                                </div>
-                                            )
-                                        }) : timerState.is_running && (
-                                            <div style={{width: '100%', backgroundColor: getTaskColor(timerState.course, false)}} className="relative rounded-sm flex items-center justify-center shadow-inner">
-                                                <span className="text-[10px] font-bold text-white z-10">{Math.floor(timerState.time_left / 60) || timerState.time_str}</span>
-                                                {timerState.distraction_markers && timerState.distraction_markers.map((d, i) => (
-                                                    <div key={i} className="absolute top-0 w-1 h-full bg-red-500 shadow-[0_0_8px_red] z-0" style={{left: `${d}%`}}></div>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                    {queue && queue.length > 0 && (
-                                        <div className="flex justify-between text-[9px] font-bold text-gray-500 mt-1 px-1 uppercase tracking-widest">
-                                            <span>Now</span>
-                                            <span>+{queue.reduce((acc, q) => acc + (q.status !== 'completed' ? q.duration : 0), 0)}m remaining</span>
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div className="flex justify-between items-end mt-2 shrink-0">
-                                    <div>
-                                        <div className={`text-5xl font-mono font-bold tracking-widest drop-shadow-lg ${timerState.is_running ? 'text-white' : isPaused ? 'text-yellow-400' : 'text-gray-300'}`}>{timerState.time_str || "25:00"}</div>
-                                    </div>
-                                    <div className="flex gap-3">
-                                        <button onClick={toggleTimer} className={`px-6 py-3 rounded-lg text-xs font-bold tracking-widest text-white uppercase shadow-lg transition-colors ${timerState.is_running ? 'bg-yellow-600/50 hover:bg-yellow-600 border border-yellow-500/50' : 'bg-green-600/50 hover:bg-green-600 border border-green-500/50'}`}><i className={`fas ${timerState.is_running ? 'fa-pause' : 'fa-play'} mr-2`}></i>{timerState.is_running ? 'Pause' : 'Start'}</button>
-                                        <button onClick={() => { if (timerState.is_running) { backend.request(JSON.stringify({action: 'stop_timer'})); setIsPaused(false); } }} className="px-6 py-3 rounded-lg text-xs font-bold tracking-widest text-white uppercase bg-red-600/50 hover:bg-red-600 border border-red-500/50 shadow-lg transition-colors"><i className="fas fa-stop mr-2"></i> Stop</button>
+                                        {queue.length === 0 && <div className="text-xs text-gray-500 italic text-center py-4">Queue is empty</div>}
                                     </div>
                                 </div>
                             </div>
@@ -622,7 +780,7 @@
         // ==========================================
         // SOPHISTICATED PDF ENGINE WITH CONTINUOUS SCROLL
         // ==========================================
-const PdfPage = ({ pageNum, backend, refreshKey, onAnnotate, onRefreshMeta, zoomLevel }) => {
+        const PdfPage = ({ pageNum, backend, refreshKey, onAnnotate, onRefreshMeta, zoomLevel, activeFile }) => {
             const [pageData, setPageData] = useState(null);
             const [pixDim, setPixDim] = useState({w: 1, h: 1, renderZoom: 3.0});
             const [isIntersecting, setIsIntersecting] = useState(false);
@@ -654,8 +812,13 @@ const PdfPage = ({ pageNum, backend, refreshKey, onAnnotate, onRefreshMeta, zoom
             };
 
             useEffect(() => {
+                setIsIntersecting(false); 
+                setPageData(null);
+            }, [activeFile]);
+
+            useEffect(() => {
                 if (isIntersecting) fetchPage();
-            }, [isIntersecting, refreshKey]);
+            }, [isIntersecting, refreshKey, activeFile]);
 
             const handleMouseDown = (e) => {
                 if (!imgRef.current) return;
@@ -824,16 +987,17 @@ const PdfPage = ({ pageNum, backend, refreshKey, onAnnotate, onRefreshMeta, zoom
                                 <div className="flex gap-2 items-center">
                                     <span className="text-[10px] font-bold text-blue-400 border border-blue-500/30 px-3 py-1 rounded bg-black/50">Pg {currentPageDisplay} of {totalPages}</span>
                                     
-                                    <button onClick={() => {
-                                        if (activeFile) backend.request(JSON.stringify({action: 'lib_open_native', filename: activeFile}));
-                                    }} className="px-3 py-1.5 rounded bg-purple-600/50 hover:bg-purple-600 text-white text-[10px] font-bold tracking-widest uppercase border border-purple-500/50 transition shadow-lg ml-2">
-                                        <i className="fas fa-external-link-alt mr-1"></i> Native Editor
-                                    </button>
+                                    {activeFile && (
+                                        <button onClick={() => backend.request(JSON.stringify({action: 'lib_open_native', filename: activeFile}))} className="px-3 py-1.5 rounded bg-purple-600/50 hover:bg-purple-600 text-white text-[10px] font-bold tracking-widest uppercase border border-purple-500/50 transition shadow-lg ml-2">
+                                            <i className="fas fa-external-link-alt mr-1"></i> Native Editor
+                                        </button>
+                                    )}
 
                                     <button onClick={() => setIsFullscreen(!isFullscreen)} className="px-3 py-1.5 rounded bg-white/10 hover:bg-white/20 text-white text-xs ml-2"><i className={`fas ${isFullscreen ? 'fa-compress' : 'fa-expand'}`}></i></button>
                                 </div>
                             </div>
                             
+                            {/* INFINITE SCROLL CONTAINER */}
                             <div className="flex-grow overflow-auto bg-black/60 flex flex-col items-center custom-scrollbar relative p-4 text-center" onScroll={handleScroll}>
                                 {activeFile ? (
                                     Array.from({ length: totalPages }).map((_, idx) => (
@@ -843,6 +1007,7 @@ const PdfPage = ({ pageNum, backend, refreshKey, onAnnotate, onRefreshMeta, zoom
                                             zoomLevel={zoomLevel} 
                                             backend={backend} 
                                             tool={tool} 
+                                            activeFile={activeFile}
                                             refreshKey={refreshKeys[idx] || 0}
                                             onAnnotate={handleAnnotate}
                                             onRefreshMeta={onRefreshMeta}
@@ -872,6 +1037,7 @@ const PdfPage = ({ pageNum, backend, refreshKey, onAnnotate, onRefreshMeta, zoom
                         )}
                     </div>
 
+                    {/* Markdown Annotation Modal */}
                     {showNoteModal && (
                         <div className="fixed inset-0 bg-black/90 z-[150] flex items-center justify-center p-4 backdrop-blur-md">
                             <div className="glass-panel p-6 w-full max-w-4xl h-[80vh] flex flex-col gap-4 fade-in border border-blue-500/50">
@@ -1284,7 +1450,6 @@ const PdfPage = ({ pageNum, backend, refreshKey, onAnnotate, onRefreshMeta, zoom
                     const data = JSON.parse(res);
                     if (data.status === 'success') {
                         console.log(`✅ Scan parsed successfully!`);
-                        // Pass data to global modal instead of auto-saving instantly
                         if (onScanParsed) onScanParsed(data.parsed_data);
                     } else if (data.status === 'error') {
                         console.error(`❌ Error parsing scan: ${data.message}`);
@@ -1312,7 +1477,6 @@ const PdfPage = ({ pageNum, backend, refreshKey, onAnnotate, onRefreshMeta, zoom
                 if (activeTab === 'dashboard' && chartRef.current && window.Chart) {
                     const ctx = chartRef.current.getContext('2d');
                     
-                    // Group logs by date to compute historical deficits
                     const dailyStats = {};
                     healthLogs.forEach(l => {
                         if (!dailyStats[l.date]) dailyStats[l.date] = { intake: 0, burn: 0 };
@@ -1323,7 +1487,6 @@ const PdfPage = ({ pageNum, backend, refreshKey, onAnnotate, onRefreshMeta, zoom
                     const sortedDates = Object.keys(dailyStats).sort();
                     const deficits = sortedDates.map(d => (tdee + dailyStats[d].burn) - dailyStats[d].intake);
                     
-                    // Simple projection logic: -1kg per 7700 kcal deficit
                     let projWeight = healthProfile?.weight || 70;
                     const projWeights = sortedDates.map((d, i) => {
                         projWeight -= (deficits[i] / 7700);
@@ -1466,7 +1629,7 @@ const PdfPage = ({ pageNum, backend, refreshKey, onAnnotate, onRefreshMeta, zoom
                             </div>
                             
                             <div className="glass-panel flex-grow flex flex-col p-4 overflow-y-auto w-full lg:w-1/2">
-                                <h3 className="text-gray-300 text-[10px] font-bold tracking-widest uppercase mb-4 border-b border-white/10 pb-1">Today's Logs</h3>
+                                <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4 border-b border-white/10 pb-1">Today's Logs</h3>
                                 <div className="flex flex-col gap-2">
                                     {todayLogs.map((l, i) => (
                                         <div key={i} className="flex justify-between items-center p-3 bg-white/5 border border-white/10 rounded">
@@ -2189,7 +2352,7 @@ const PdfPage = ({ pageNum, backend, refreshKey, onAnnotate, onRefreshMeta, zoom
         };
 
         const App = () => {
-            const [currentView, setCurrentView] = useState('dashboard');
+            const [currentView, setCurrentView] = useState('hub');
             const [backend, setBackend] = useState(null);
             
             const [courses, setCourses] = useState([]);
@@ -2232,9 +2395,24 @@ const PdfPage = ({ pageNum, backend, refreshKey, onAnnotate, onRefreshMeta, zoom
             const [camFeed, setCamFeed] = useState(null);
             const [clockFeed, setClockFeed] = useState(null);
             
+            // Timeline State
+            const [todaySessions, setTodaySessions] = useState([]);
+            const [studiedHours, setStudiedHours] = useState({});
+            
             // New State for Global Scan Editor Modal
             const [showScanModal, setShowScanModal] = useState(false);
             const [scanEditData, setScanEditData] = useState({});
+
+            const fetchTodayData = (py) => {
+                const api = py || backend;
+                if (api) {
+                    api.request(JSON.stringify({action: 'get_today_data'})).then(res => {
+                        const data = JSON.parse(res);
+                        if (data.today_sessions) setTodaySessions(data.today_sessions);
+                        if (data.studied_hours) setStudiedHours(data.studied_hours);
+                    });
+                }
+            };
 
             const refreshGoals = (data) => {
                 if (data && data.goals) setGoals(data.goals);
@@ -2256,7 +2434,13 @@ const PdfPage = ({ pageNum, backend, refreshKey, onAnnotate, onRefreshMeta, zoom
                         
                         py.state_update.connect((state_json) => { 
                             const state = JSON.parse(state_json);
-                            setTimerState(state); 
+                            setTimerState(prev => {
+                                // Instantly fetch new timeline data the moment the timer successfully stops
+                                if (prev.is_running && !state.is_running) {
+                                    setTimeout(() => fetchTodayData(py), 500);
+                                }
+                                return state;
+                            }); 
                             if (state.queue) setQueue(state.queue);
                         });
                         py.video_feed.connect((b64) => { setCamFeed(`data:image/jpeg;base64,${b64}`); });
@@ -2316,6 +2500,9 @@ const PdfPage = ({ pageNum, backend, refreshKey, onAnnotate, onRefreshMeta, zoom
                                 setSettings(prev => ({...prev, mapped_folders: data.folders}));
                                 setNetworkFolders(data.network_folders);
                             });
+                            
+                            // Initialize Timeline Data on Boot
+                            fetchTodayData(py);
                         });
                     });
                 }
@@ -2329,9 +2516,9 @@ const PdfPage = ({ pageNum, backend, refreshKey, onAnnotate, onRefreshMeta, zoom
             
             const renderContent = () => {
                 switch(currentView) {
-                    case 'dashboard': return <DashboardView layout={layout} setLayout={setLayout} goals={goals} isEditingLayout={isEditingLayout} setIsEditingLayout={setIsEditingLayout} clockFeed={clockFeed} heatmap={heatmap} habits={habits} habitLogs={habitLogs} metrics={metrics} backend={backend} refreshGoals={refreshGoals} healthProfile={healthProfile} />;
+                    case 'dashboard': return <DashboardView layout={layout} setLayout={setLayout} goals={goals} isEditingLayout={isEditingLayout} setIsEditingLayout={setIsEditingLayout} clockFeed={clockFeed} heatmap={heatmap} habits={habits} habitLogs={habitLogs} metrics={metrics} backend={backend} refreshGoals={refreshGoals} healthProfile={healthProfile} healthLogs={healthLogs} studiedHours={studiedHours} />;
                     case 'health': return <HealthFitnessView backend={backend} healthProfile={healthProfile} setHealthProfile={setHealthProfile} healthLogs={healthLogs} setHealthLogs={setHealthLogs} customFoods={customFoods} customActivities={customActivities} healthPlans={healthPlans} onScanParsed={(data) => { setScanEditData(data); setShowScanModal(true); }} />;
-                    case 'hub': return <ProductivityHubView backend={backend} timerState={timerState} camFeed={camFeed} flatGoals={flatGoals} queue={queue} refreshQueue={setQueue} settings={settings} />;
+                    case 'hub': return <ProductivityHubView backend={backend} timerState={timerState} camFeed={camFeed} flatGoals={flatGoals} queue={queue} refreshQueue={setQueue} settings={settings} todaySessions={todaySessions} />;
                     case 'architecture': return <LifeArchitectureView goals={goals} backend={backend} refreshGoals={(d) => {setGoals(d.goals); setFlatGoals(d.flat_goals);}} />;
                     case 'habits': return <HabitMatrixView habits={habits} backend={backend} refreshHabits={setHabits} habitLogs={habitLogs} setHabitLogs={setHabitLogs} />;
                     case 'summary': return <DaySummaryView metrics={metrics} />;
