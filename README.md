@@ -1,84 +1,96 @@
+# 🕵️‍♂️ Sherlock Holmes Mind Palace
 
----
+A cross-platform productivity, deductive analytics, and 3D spatial knowledge management system. 
 
-## 📁 **Project Structure & Documentation**
-
-### 1. Create a detailed `README.md`
-
-Create this file in your project root:
-
-```markdown
-# 🧠 Mind Palace OS
-
-A cross-platform productivity and knowledge management system with GitHub-based synchronization.
-
-![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![Version](https://img.shields.io/badge/version-2.0.0--beta-blue)
 ![Python](https://img.shields.io/badge/python-3.12+-green)
+![React](https://img.shields.io/badge/react-18.0+-61dafb)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
 
 ## 📋 Table of Contents
-- [Overview](#overview)
-- [Features](#features)
-- [Installation](#installation)
-- [Configuration](#configuration)
-- [Usage](#usage)
-- [Sync & Sharing](#sync--sharing)
-- [Development](#development)
-- [Contributing](#contributing)
-- [License](#license)
+- [Overview](#-overview)
+- [Current Features](#-current-features)
+- [🔮 The Grand Roadmap (Future Plans)](#-the-grand-roadmap-future-plans)
+- [Installation](#-installation)
+- [Configuration](#-configuration)
+- [Sync & Architecture](#-sync--architecture)
+- [Contributing](#-contributing)
 
-## 🎯 Overview
+## 🔎 Overview
 
-Mind Palace OS is an all-in-one productivity suite that combines:
-- **Focus Timer** with distraction detection
-- **Knowledge Management** (notes, flashcards, quizzes)
-- **Habit Tracking** with streak monitoring
-- **Goal Architecture** with cascading objectives
-- **GitHub Sync** for cross-device data sharing
+The **Sherlock Holmes Mind Palace** is the ultimate convergence of a "Second Brain" and the "Method of Loci." Built with a lightning-fast **PyQt6** backend and a glassmorphism **React/JSX** frontend, it acts as a centralized operating system for your intellectual and physical life. 
 
-Built with **PyQt6** frontend and **React/JSX** for the UI, it provides a native desktop experience with web-like responsiveness.
+It is designed to seamlessly track your focus, map your knowledge spatially, analyze your behavioral data deductively, and synchronize perfectly across all your devices using peer-to-peer GitHub node architectures.
 
-## ✨ Features
+## ✨ Current Features
 
-### 🕐 Focus & Productivity
-- **Pomodoro Timer** with work/break sessions
-- **Automatic Session Queue** with auto-advance
-- **Vision Tracker** (face detection for attention)
-- **Quiet Mode** (disable webcam, sounds, speech)
-- **App Monitoring** (detect distracting applications)
-- **Session History** with analytics
+### 🕐 Focus & Productivity Hub
+- **24-Hour Absolute Timeline:** Infinite-scroll daily Gantt chart mapping out every minute of your day.
+- **Vision Tracker Engine:** OpenCV-powered hardware acceleration tracking face and eye presence to ensure absolute attention.
+- **Distraction Memory:** Pinpoint recording of the exact second you lost focus (App, Camera, or Manual) embedded directly into your timeline.
 
-### 📚 Knowledge Management
-- **Markdown Notes** with live preview
-- **Flashcards** with spaced repetition
-- **Quiz Engine** with JSON import
-- **Course Organization** with folders and colors
+### 📚 Knowledge Management & Library
+- **Native High-DPI PDF Editor:** Continuous virtual scrolling, lazy-loading, and true PDF Text Matrix highlighting via PyMuPDF.
+- **Markdown Meta-Annotation:** Inject rich markdown notes (Code blocks, LaTeX, Images) directly into PDF coordinates.
+- **Flashcards & Quiz Engine:** JSON-based study tools with spaced repetition mechanics.
 
-### 🎯 Goals & Habits
-- **Cascading Goals** with sub-goals
-- **Habit Matrix** with 7-day tracking
-- **Progress Dashboard** with metrics
-- **Contribution Heatmap** (GitHub-style)
+### 🎯 Goals & Health
+- **Cascading Goal Architecture:** Infinite sub-goal mapping with integrated deadlines.
+- **Health & Deficit Engine:** Auto-parsing of OCR body scans, caloric deficit projections, and custom food/activity logging.
+- **Habit Matrix:** 7-day rolling GitHub-style contribution heatmaps.
 
-### 🔄 Sync & Sharing
-- **GitHub-based Sync** (data only, not code)
-- **Cross-device Merging** (UUID-based conflict resolution)
-- **File Sharing** (mapped folders)
-- **Automatic Backups** (hourly)
-- **Export/Import** (ZIP with JSON)
+### 🔄 Distributed Sync Network
+- **Peer-to-Peer Database Nodes:** True Last-Write-Wins (LWW) conflict-free database merging across Windows, Mac, and Linux.
+- **Shared Network Drives:** Map local directories to auto-sync files across your personal device fleet.
+
+---
+
+## 🔮 The Grand Roadmap (Future Plans)
+
+The following outlines the aggressive future development phases to transform the OS into a literal 3D Mind Palace and advanced analytical engine.
+
+### Phase 1: 🏰 The 3D Method of Loci (React Three Fiber)
+Transitioning data from 2D menus into a stylized, interactive low-poly 3D spatial environment.
+*   **The Grand Library:** Finished PDFs and notes render as physical books on shelves, color-coded by course. Clicking a book seamlessly transitions to the 2D reader.
+*   **The Strategy Room:** A War Table displaying the 3D Cascading Goals tree and a literal timeline clock mapping out your day.
+*   **The Trophy Hall:** Maintaining habits builds glowing artifacts on pedestals; breaking streaks causes them to crack.
+*   **The Gallery:** Hallways lined with picture frames that auto-populate with your Chronicle Photo Diary.
+*   **The Training Grounds:** Physical flashcard decks on a desk that flip in 3D space during review mode.
+
+### Phase 2: 🧠 "Quantified Self" Behavioral Analytics
+Leveraging the SQLite database to run local data science on your life, channeling the deductive reasoning of Sherlock Holmes.
+*   **The Daily Check-In:** Frictionless logging of Sleep, Energy, and Mood upon system boot.
+*   **Deductive Predictive Analytics:** Local regression models that cross-reference your diet, sleep, and distraction rates to provide insights (e.g., *"You are 40% more productive when consuming >100g protein"* or *"Peak cognitive windows detected between 09:30 - 11:15 AM"*).
+*   **Life Reports:** Automated, "Spotify Wrapped"-style PDFs generated weekly, monthly, and yearly, visualizing your holistic growth.
+
+### Phase 3: 📸 The Chronicle & Photo Diary
+*   **The Timeline Anchor:** Attach polaroids and memories to specific days in your Dual Calendar.
+*   **The "Focus Snap":** The Vision Tracker silently captures a photo of you "in the zone" when you successfully complete a 60-minute unbroken deep work session, logging it to your daily gallery.
+
+### Phase 4: 🤖 AI "Second Brain" Integration
+*   **Auto-Flashcards:** Local LLM integration to instantly generate Front/Back flashcards from highlighted PDF text.
+*   **Semantic Note Search (RAG):** Chat directly with your Mind Palace using vector databases to retrieve exact notes and concepts.
+*   **Handwriting OCR:** Hold a physical notebook up to the webcam to auto-transcribe it into a Markdown note.
+
+### Phase 5: 🛡️ Focus Firewall & Biometrics
+*   **Network-Level DNS Blocking:** Python backend scripts that dynamically overwrite `/etc/hosts` to physically block distracting websites (Reddit, Twitter) during Pomodoros, while leaving educational resources accessible.
+*   **Posture & Fatigue Detection:** Expanding OpenCV to track slouching and blink-rates, issuing audible chimes if your physical posture degrades or fatigue sets in.
+*   **RPG Skill Trees & XP:** Gamifying deep work into "Intelligence" and "Stamina" XP, allowing users to level up and unlock new 3D room aesthetics and "Streak Shields".
+
+---
 
 ## 🚀 Installation
 
 ### Prerequisites
 - Python 3.12 or higher
 - Git
-- GitHub account (for sync features)
+- GitHub account (for distributed sync)
 
 ### Quick Start
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/AliNikkhah2001/MindPalaceOS.git
+git clone [https://github.com/AliNikkhah2001/MindPalaceOS.git](https://github.com/AliNikkhah2001/MindPalaceOS.git)
 cd MindPalaceOS
 
 # 2. Create virtual environment
@@ -90,222 +102,3 @@ pip install -r requirements.txt
 
 # 4. Run the application
 python main.py
-```
-
-### Development Installation
-
-```bash
-# Install with development dependencies
-pip install -r requirements-dev.txt
-
-# Run tests
-pytest tests/
-
-# Run with debug output
-python main.py --debug
-```
-
-## ⚙️ Configuration
-
-### Environment Variables
-
-Create a `.env` file in the project root:
-
-```env
-# GitHub Personal Access Token (required for sync)
-GITHUB_TOKEN=ghp_your_token_here
-
-# Optional: Override default settings
-# MUTE_SOUNDS=true
-# QUIET_MODE=false
-```
-
-### Settings
-
-The app stores settings in `config.json`:
-
-```json
-{
-  "sync_enabled": true,
-  "sync_repo_url": "https://github.com/username/data-repo.git",
-  "sync_interval": 3600,
-  "quiet_mode": false,
-  "mute_sounds": true,
-  "app_monitoring_enabled": false
-}
-```
-
-### GitHub Token Setup
-
-1. Go to [GitHub Settings → Tokens](https://github.com/settings/tokens)
-2. Generate a **classic token** with `repo` scope
-3. Copy the token (starts with `ghp_`)
-4. Add to `.env` file as `GITHUB_TOKEN`
-
-## 🎮 Usage
-
-### Main Interface
-
-```
-┌─────────────┬─────────────────────────────────────────────┐
-│  Navigation │           Main Content Area                │
-│             │                                             │
-│  Dashboard  │  - Global Progress                        │
-│  Focus Hub  │  - Contribution Heatmap                  │
-│  Goals      │  - Habit Matrix                          │
-│  Habits     │  - Notes / Flashcards / Quizzes          │
-│  Notes      │                                             │
-│  Settings   │                                             │
-└─────────────┴─────────────────────────────────────────────┘
-```
-
-### Keyboard Shortcuts
-
-| Shortcut | Action |
-|----------|--------|
-| `Ctrl+N` | New Note |
-| `Ctrl+S` | Save Current |
-| `Ctrl+F` | Search |
-| `Ctrl+Q` | Quiet Mode Toggle |
-| `Space` | Start/Pause Timer |
-
-### Sync Workflow
-
-1. **Initial Setup**
-   - Create a private GitHub repository for data
-   - Add `GITHUB_TOKEN` to `.env`
-   - Enable sync in Settings
-
-2. **Auto-Sync**
-   - Syncs every hour (configurable)
-   - Merges data from all devices
-   - Preserves all notes, habits, goals
-
-3. **Manual Sync**
-   - Click "Sync Now" in Settings
-   - Pulls remote changes, merges, pushes local
-
-## 🔄 Sync & Sharing
-
-### Repository Structure
-
-The data repository contains:
-
-```
-data-repo/
-├── sync_data.json          # Master database (all records)
-├── files/                  # Shared files
-│   ├── device-001/         # Device-specific files
-│   ├── device-002/
-│   └── shared/             # Shared across devices
-└── .gitignore              # Ensures only data is synced
-```
-
-### Merge Strategy
-
-- **UUID-based** conflict resolution
-- **Modified_at** timestamp comparison (newer wins)
-- **Never deletes** data (only adds/updates)
-- **Preserves** notes, habits, goals across devices
-
-## 💻 Development
-
-### Project Structure
-
-```
-MindPalaceOS/
-├── main.py                 # Main application
-├── shadow_os_cache/        # Cached web assets
-├── shadow_venv/            # Virtual environment
-├── config.json             # User settings
-├── second_brain.db         # SQLite database
-├── requirements.txt        # Dependencies
-├── README.md              # This file
-├── .env                   # Environment variables
-└── .gitignore             # Git ignore rules
-```
-
-### Code Architecture
-
-```
-┌─────────────────────────────────────────────────────┐
-│                   MindPalaceWebOS (Main Window)     │
-├─────────────────────────────────────────────────────┤
-│  ┌─────────────┐  ┌─────────────────────────────┐  │
-│  │   React UI  │  │   SystemBridge (Python)     │  │
-│  │  (JSX/Babel)│◄─┤   - State Management        │  │
-│  │             │  │   - Database Operations      │  │
-│  │  Dashboard  │  │   - Sync Manager            │  │
-│  │  Focus Hub  │  │   - Vision Tracker          │  │
-│  │  Notes      │  │   - Sound/Speech            │  │
-│  │  Settings   │  │                             │  │
-│  └─────────────┘  └─────────────────────────────┘  │
-│                          │                          │
-│                          ▼                          │
-│              ┌─────────────────────┐               │
-│              │   SQLite Database   │               │
-│              │   (second_brain.db) │               │
-│              └─────────────────────┘               │
-└─────────────────────────────────────────────────────┘
-```
-
-### Debugging
-
-```bash
-# Run with debug output
-python main.py --debug
-
-# Check database
-sqlite3 second_brain.db .tables
-
-# Test sync connection
-python test_git.py
-```
-
-## 🤝 Contributing
-
-### Git Workflow
-
-```bash
-# 1. Create a feature branch
-git checkout -b feature/your-feature-name
-
-# 2. Make changes and commit
-git add .
-git commit -m "feat: Add your feature description"
-
-# 3. Push and create PR
-git push -u origin feature/your-feature-name
-```
-
-### Commit Message Convention
-
-```
-type(scope): description
-
-Types:
-- feat: New feature
-- fix: Bug fix
-- docs: Documentation
-- style: Code style
-- refactor: Code refactor
-- test: Tests
-- chore: Maintenance
-```
-
-## 📝 License
-
-MIT License - see [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- Built with PyQt6 and React
-- Icons from Font Awesome
-- Fonts from Google Fonts
-
----
-
-**Made with ❤️ for productivity**
-```
-
----
