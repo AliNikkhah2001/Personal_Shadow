@@ -10,7 +10,7 @@ A cross-platform productivity, deductive analytics, and 3D spatial knowledge man
 ## 📋 Table of Contents
 - [Overview](#-overview)
 - [Current Features](#-current-features)
-- [🔮 The Grand Roadmap (Future Plans)](#-the-grand-roadmap-future-plans)
+- [🗺️ Master Action Plan & Progress](#-master-action-plan--progress)
 - [Installation](#-installation)
 - [Configuration](#-configuration)
 - [Sync & Architecture](#-sync--architecture)
@@ -36,7 +36,7 @@ It is designed to seamlessly track your focus, map your knowledge spatially, ana
 
 ### 🎯 Goals & Health
 - **Cascading Goal Architecture:** Infinite sub-goal mapping with integrated deadlines.
-- **Health & Deficit Engine:** Auto-parsing of OCR body scans, caloric deficit projections, and custom food/activity logging.
+- **Health Engine:** Caloric deficit projections and basic logging.
 - **Habit Matrix:** 7-day rolling GitHub-style contribution heatmaps.
 
 ### 🔄 Distributed Sync Network
@@ -45,37 +45,47 @@ It is designed to seamlessly track your focus, map your knowledge spatially, ana
 
 ---
 
-## 🔮 The Grand Roadmap (Future Plans)
+## 🗺️ Master Action Plan & Progress
 
-The following outlines the aggressive future development phases to transform the OS into a literal 3D Mind Palace and advanced analytical engine.
+Our development roadmap is strictly phased to ensure modular stability. 
 
-### Phase 1: 🏰 The 3D Method of Loci (React Three Fiber)
-Transitioning data from 2D menus into a stylized, interactive low-poly 3D spatial environment.
-*   **The Grand Library:** Finished PDFs and notes render as physical books on shelves, color-coded by course. Clicking a book seamlessly transitions to the 2D reader.
-*   **The Strategy Room:** A War Table displaying the 3D Cascading Goals tree and a literal timeline clock mapping out your day.
-*   **The Trophy Hall:** Maintaining habits builds glowing artifacts on pedestals; breaking streaks causes them to crack.
-*   **The Gallery:** Hallways lined with picture frames that auto-populate with your Chronicle Photo Diary.
-*   **The Training Grounds:** Physical flashcard decks on a desk that flip in 3D space during review mode.
+### Phase 1: The Timeline & Hub Refinement
+- [ ] Add UI configuration for Timeline start/end hours and pixel scaling.
+- [ ] Wire past timeline sessions to fetch exact distraction JSON.
+- [ ] Trigger `TimelapseDialog` securely from timeline clicks.
+- [ ] Visually map "Planned vs. Actual" duration inside timeline blocks.
 
-### Phase 2: 🧠 "Quantified Self" Behavioral Analytics
-Leveraging the SQLite database to run local data science on your life, channeling the deductive reasoning of Sherlock Holmes.
-*   **The Daily Check-In:** Frictionless logging of Sleep, Energy, and Mood upon system boot.
-*   **Deductive Predictive Analytics:** Local regression models that cross-reference your diet, sleep, and distraction rates to provide insights (e.g., *"You are 40% more productive when consuming >100g protein"* or *"Peak cognitive windows detected between 09:30 - 11:15 AM"*).
-*   **Life Reports:** Automated, "Spotify Wrapped"-style PDFs generated weekly, monthly, and yearly, visualizing your holistic growth.
+### Phase 2: Advanced Nutrition & Fasting Engine
+- [ ] Expand SQLite schema (`ingredients`, `composite_foods`, `recipe_ingredients`, `food_logs`).
+- [ ] Build Python ingestion script for standard/Persian food datasets (SAMAR).
+- [ ] UI: Add/Edit/Remove ingredients with support for local image paths/icons.
+- [ ] UI: Custom Recipe Builder (mixing ingredients to auto-calculate total macros).
+- [ ] *Future Scope: Calculating calories natively from OpenCV image vision.*
 
-### Phase 3: 📸 The Chronicle & Photo Diary
-*   **The Timeline Anchor:** Attach polaroids and memories to specific days in your Dual Calendar.
-*   **The "Focus Snap":** The Vision Tracker silently captures a photo of you "in the zone" when you successfully complete a 60-minute unbroken deep work session, logging it to your daily gallery.
+### Phase 3: "Quantified Self" Behavioral Analytics
+- [ ] Implement "Daily Check-in" React modal (Sleep, Energy, Mood tags).
+- [ ] Establish `daily_metrics` SQLite table.
+- [ ] Build Pandas/NumPy Python backend for data correlation.
+- [ ] Render "Behavioral Insights" and Chart.js correlation graphs on Dashboard.
+- [ ] Automated PDF "Life Reports" (Weekly/Monthly/Yearly).
 
-### Phase 4: 🤖 AI "Second Brain" Integration
-*   **Auto-Flashcards:** Local LLM integration to instantly generate Front/Back flashcards from highlighted PDF text.
-*   **Semantic Note Search (RAG):** Chat directly with your Mind Palace using vector databases to retrieve exact notes and concepts.
-*   **Handwriting OCR:** Hold a physical notebook up to the webcam to auto-transcribe it into a Markdown note.
+### Phase 4: The Chronicle (Visual Photo Diary)
+- [ ] Modify OpenCV Tracker to capture "Focus Snaps" upon completing flawless 60m+ sessions.
+- [ ] Save snaps locally to `memories/` directory.
+- [ ] Inject polaroid indicators into `DualCalendar` React component.
+- [ ] Build the "Chronicle Vault" masonry gallery view for browsing daily photos.
 
-### Phase 5: 🛡️ Focus Firewall & Biometrics
-*   **Network-Level DNS Blocking:** Python backend scripts that dynamically overwrite `/etc/hosts` to physically block distracting websites (Reddit, Twitter) during Pomodoros, while leaving educational resources accessible.
-*   **Posture & Fatigue Detection:** Expanding OpenCV to track slouching and blink-rates, issuing audible chimes if your physical posture degrades or fatigue sets in.
-*   **RPG Skill Trees & XP:** Gamifying deep work into "Intelligence" and "Stamina" XP, allowing users to level up and unlock new 3D room aesthetics and "Streak Shields".
+### Phase 5: The Focus Firewall (Network Blocking)
+- [ ] Python utility to backup and overwrite OS `/etc/hosts` or Windows equivalent.
+- [ ] Build Blacklist/Whitelist UI in Settings tab.
+- [ ] Tie network execution strictly to Pomodoro Start/Stop/Pause states.
+
+### Phase 6: The 3D Mind Palace (Method of Loci)
+- [ ] Inject `three.js` and `@react-three/fiber` into WebEngine.
+- [ ] Render 3D "Grand Library" with bookshelves.
+- [ ] Map SQLite `courses` and `notes` to generate physical 3D interactive books.
+- [ ] Implement Raycasting: Clicking a 3D book seamlessly opens the 2D Markdown Editor.
+- [ ] Build 3D "Trophy Hall" mapping habit streaks to glowing artifacts.
 
 ---
 
