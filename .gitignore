@@ -1,33 +1,40 @@
 ﻿# Python & Virtual Environment
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.py[cod]
+*.class
+*.so
+
+# Virtual environments
+shadow_venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
 
 # Environment variables
 .env
 .env.local
 .env.*.local
-
-# Virtual environment
-shadow_venv/
-venv/
-env/
-
-# Python cache
-__pycache__/
-*.pyc
-*.pyo
+.env.example
+!.env.example
 
 # IDE files
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
+*.pyproj
+*.user
+*.sln
+*.suo
 
-
-
-__pycache__/
-*.py[cod]
-*.class
-*.so
-.Python
+# Build & distribution
 build/
 develop-eggs/
 dist/
@@ -43,19 +50,8 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-shadow_venv/
-venv/
-env/
-ENV/
-env.bak/
-venv.bak/
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
 
-# Project‑specific files
+# Project-specific
 config.json
 !config.example.json
 second_brain.db
@@ -83,7 +79,7 @@ Desktop.ini
 *.temp
 *.bak
 
-# Test / coverage
+# Test & coverage
 .pytest_cache/
 .coverage
 htmlcov/
@@ -92,23 +88,16 @@ htmlcov/
 .dmypy.json
 dmypy.json
 
+# Sensitive files
+Modular/New Text Document.txt
+secrets.*
+*.key
+*.pem
+*.crt
+*.p12
+
 # Misc
-*.pyproj
-*.user
-*.sln
-*.suo
-. e n v 
- 
- . e n v 
- 
- . e n v 
- 
- . e n v . e x a m p l e 
- 
- . e n v 
- 
- . e n v . e x a m p l e 
- 
- . e n v 
- 
- 
+*.log
+*.pid
+*.seed
+*.pid.lock
