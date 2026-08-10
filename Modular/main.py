@@ -162,10 +162,10 @@ class MindPalaceWebOS(QMainWindow):
         self.channel.registerObject("backend", self.bridge)
         self.browser.page().setWebChannel(self.channel)
 
-        with open("index.html", encoding="utf-8") as f:
+        with open("frontend/index.html", encoding="utf-8") as f:
             html_content = f.read()
 
-        base_url = QUrl.fromLocalFile(os.path.abspath(CACHE_DIR) + os.sep)
+        base_url = QUrl.fromLocalFile(os.path.abspath(".") + os.sep)
         self.browser.setHtml(html_content, base_url)
         self.setCentralWidget(self.browser)
 
