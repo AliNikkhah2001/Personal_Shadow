@@ -802,6 +802,113 @@ const SettingsView = React.memo(({ settings, setSettings, backend, networkFolder
                         <input type="number" value={settings.face_min_size || 120} onChange={e => handleChange('face_min_size', parseInt(e.target.value))} className="glass-input p-2.5 rounded text-sm" />
                     </div>
 
+                    {/* Distributed Sync Network Section */}
+                    <div className="md:col-span-2 text-blue-400 font-bold uppercase tracking-widest text-xs border-b border-white/10 pb-1 mt-6">Distributed Sync Network</div>
+                    <div className="flex flex-col gap-1">
+                        <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">GitHub Repo URL</label>
+                        <input type="text" value={settings.sync_repo_url || ''} onChange={e => handleChange('sync_repo_url', e.target.value)} className="glass-input p-2.5 rounded text-sm" placeholder="https://github.com/user/repo.git" />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                        <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Sync Interval (seconds)</label>
+                        <input type="number" value={settings.sync_interval || 3600} onChange={e => handleChange('sync_interval', parseInt(e.target.value))} className="glass-input p-2.5 rounded text-sm" />
+                    </div>
+                    <div className="flex gap-6 md:col-span-2">
+                        <div className="flex items-center gap-2">
+                            <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">Enable Sync</label>
+                            <input type="checkbox" checked={settings.sync_enabled || false} onChange={e => handleChange('sync_enabled', e.target.checked)} className="w-5 h-5 rounded bg-black/40 border border-white/20 accent-blue-500" />
+                        </div>
+                    </div>
+                    <div className="md:col-span-2">
+                        <button onClick={() => {
+                            backend.request(JSON.stringify({action: 'sync_now'}));
+                        }} className="glass-button px-6 py-2 rounded text-xs font-bold tracking-widest text-white uppercase bg-green-600/30 border-green-500/50 hover:bg-green-600 shadow-lg w-full">
+                            <i className="fas fa-sync-alt mr-2"></i> Force Sync Now
+                        </button>
+                    </div>
+
+                    {/* Network Folders */}
+                    <div className="md:col-span-2 text-blue-400 font-bold uppercase tracking-widest text-xs border-b border-white/10 pb-1 mt-4">Network Nodes</div>
+                    <div className="md:col-span-2">
+                        {networkFolders && networkFolders.length > 0 ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                {networkFolders.map(f => (
+                                    <div key={f.device_id} className="bg-white/5 p-3 rounded border border-white/10">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <span className="text-xs font-bold text-white">{f.device_id.substring(0, 8)}...</span>
+                                            {f.is_local && <span className="text-[10px] text-blue-400 font-bold uppercase">This Device</span>}
+                                        </div>
+                                        <div className="text-[10px] text-gray-400">
+                                            <div>Files: {f.file_count}</div>
+                                            <div>Last Update: {f.last_update}</div>
+                                        </div>
+                                        {!f.is_local && (
+                                            <button onClick={() => {
+                                                if (confirm(`Wipe local DB and clone from Node ${f.device_id.substring(0, 8)}?`)) {
+                                                    backend.request(JSON.stringify({action: 'hard_clone_remote', target_device: f.device_id}));
+                                                }
+                                            }} className="w-full py-2 mt-2 bg-yellow-600/30 hover:bg-yellow-600 border border-yellow-500/50 rounded text-[10px] font-bold uppercase tracking-widest text-yellow-300 hover:text-white transition-all shadow">
+                                                <i className="fas fa-file-download mr-1"></i> Hard Clone From This Node
+                                            </button>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="text-xs text-gray-500 italic p-3 bg-[#0c0c0f] rounded-lg border border-white/5 text-center">
+                                No peer nodes found. Run "Force Sync Now" to discover nodes.
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Danger Zone */}
+                    <div className="md:col-span-2 text-red-500 font-bold uppercase tracking-widest text-xs border-b border-red-500/30 pb-1 mt-6">Danger Zone</div>
+                    <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-red-900/10 border border-red-500/20 rounded-lg">
+                        {/* Master Overwrite */}
+                        <div className="flex flex-col gap-3">
+                            <div className="flex flex-col">
+                                <span className="text-xs font-bold text-red-400">1. Master Overwrite</span>
+                                <span className="text-[10px] text-gray-400 leading-relaxed mt-1">Make THIS device the absolute Master. Forces this data to the cloud and deletes conflicting nodes.</span>
+                            </div>
+                            <button onClick={() => {
+                                if (confirm("WARNING: This will make this device the absolute master and wipe conflicting remote data. Continue?")) {
+                                    backend.request(JSON.stringify({action: 'force_sync_now'}));
+                                }
+                            }} className="glass-button px-4 py-3 mt-auto rounded text-xs font-bold tracking-widest text-white uppercase bg-red-600/50 border-red-500/50 hover:bg-red-600 shadow-[0_0_15px_rgba(239,68,68,0.3)] w-full transition-all">
+                                <i className="fas fa-upload mr-2"></i> Force Push as Master
+                            </button>
+                        </div>
+
+                        {/* Hard Clone */}
+                        <div className="flex flex-col gap-3">
+                            <div className="flex flex-col">
+                                <span className="text-xs font-bold text-yellow-400">2. Hard Clone</span>
+                                <span className="text-[10px] text-gray-400 leading-relaxed mt-1">Wipe THIS device's database completely and clone an exact 1:1 copy of the Master Node.</span>
+                            </div>
+                            <button onClick={() => {
+                                if (confirm("DANGER: This will completely WIPE this PC's local database and download the master copy from Git. Proceed?")) {
+                                    backend.request(JSON.stringify({action: 'hard_clone_remote'}));
+                                }
+                            }} className="glass-button px-4 py-3 mt-auto rounded text-xs font-bold tracking-widest text-white uppercase bg-yellow-600/50 border-yellow-500/50 hover:bg-yellow-600 shadow-[0_0_15px_rgba(234,179,8,0.3)] w-full transition-all">
+                                <i className="fas fa-download mr-2"></i> Wipe & Clone Master
+                            </button>
+                        </div>
+
+                        {/* Force Reset All Data */}
+                        <div className="flex flex-col gap-3">
+                            <div className="flex flex-col">
+                                <span className="text-xs font-bold text-red-600">3. Wipe All Data</span>
+                                <span className="text-[10px] text-gray-400 leading-relaxed mt-1">Completely wipe ALL local data: database, config, and Git sync repo. Sync settings are preserved.</span>
+                            </div>
+                            <button onClick={() => {
+                                if (confirm("DANGER: This will permanently delete ALL local data. Continue?")) {
+                                    backend.request(JSON.stringify({action: 'force_reset_all_data'}));
+                                }
+                            }} className="glass-button px-4 py-3 mt-auto rounded text-xs font-bold tracking-widest text-white uppercase bg-red-700/50 border-red-600/50 hover:bg-red-700 shadow-[0_0_15px_rgba(239,68,68,0.3)] w-full transition-all">
+                                <i className="fas fa-trash-alt mr-2"></i> Wipe All Data
+                            </button>
+                        </div>
+                    </div>
+
                 </div>
             </div>
         </div>

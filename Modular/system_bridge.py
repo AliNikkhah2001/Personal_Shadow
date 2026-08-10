@@ -54,6 +54,9 @@ except ImportError:
     except ImportError:
         pymupdf = None
 
+if pymupdf is None:
+    print("WARNING: pymupdf not available. PDF functionality will be disabled.")
+
 import cv2
 from PyQt6.QtCore import QBuffer, QByteArray, QIODevice, QObject, QRectF, Qt, QTime, QTimer, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QBrush, QColor, QFont, QImage, QPainter, QPen, QPixmap
