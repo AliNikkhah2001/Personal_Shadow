@@ -17,6 +17,10 @@
                     
                     // Recipe Builder States
                     const [recName, setRecName] = useState("");
+                    const [recInstructions, setRecInstructions] = useState("");
+                    const [recPrepTime, setRecPrepTime] = useState(0);
+                    const [recCookTime, setRecCookTime] = useState(0);
+                    const [recServings, setRecServings] = useState(1);
                     const [recParts, setRecParts] = useState([]);
                     const [partSelect, setPartSelect] = useState("");
                     const [partGrams, setPartGrams] = useState(100);
@@ -66,10 +70,10 @@
 
                     const saveRecipe = () => {
                         if(!recName || recParts.length === 0) return;
-                        backend.request(JSON.stringify({action: 'manage_nutrition', sub: 'add_composite', name: recName, parts: recParts})).then(res => {
+                        backend.request(JSON.stringify({action: 'manage_nutrition', sub: 'add_composite', name: recName, parts: recParts, instructions: recInstructions, prep_time_min: parseInt(recPrepTime)||0, cook_time_min: parseInt(recCookTime)||0, servings: parseInt(recServings)||1})).then(res => {
                             const data = JSON.parse(res);
                             setIngredients(data.ingredients); setCompositeFoods(data.composite_foods);
-                            setRecName(""); setRecParts([]);
+                            setRecName(""); setRecInstructions(""); setRecPrepTime(0); setRecCookTime(0); setRecServings(1); setRecParts([]);
                         });
                     };
 
@@ -297,6 +301,15 @@
                                             <div className="glass-panel p-4 flex flex-col gap-3 fade-in">
                                                 <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest border-b border-white/10 pb-1">Composite Recipe Builder</h3>
                                                 <input type="text" placeholder="Recipe Name (e.g., Kebab Koobideh)" className="glass-input p-2 rounded text-xs" value={recName} onChange={e=>setRecName(e.target.value)} />
+                                                <div className="flex flex-col gap-1">
+                                                    <label className="text-[10px] text-gray-400 uppercase tracking-widest">Instructions</label>
+                                                    <textarea placeholder="Cooking instructions..." className="glass-input p-2 rounded text-xs h-20" value={recInstructions} onChange={e=>setRecInstructions(e.target.value)}></textarea>
+                                                </div>
+                                                <div className="grid grid-cols-3 gap-2">
+                                                    <input type="number" placeholder="Prep Time (min)" className="glass-input p-2 rounded text-xs" value={recPrepTime} onChange={e=>setRecPrepTime(e.target.value)} />
+                                                    <input type="number" placeholder="Cook Time (min)" className="glass-input p-2 rounded text-xs" value={recCookTime} onChange={e=>setRecCookTime(e.target.value)} />
+                                                    <input type="number" placeholder="Servings" className="glass-input p-2 rounded text-xs" value={recServings} onChange={e=>setRecServings(e.target.value)} />
+                                                </div>
                                                 
                                                 <div className="flex gap-2 p-2 bg-black/40 rounded border border-white/10 items-center">
                                                     <select className="glass-input p-2 rounded text-xs flex-grow" value={partSelect} onChange={e=>setPartSelect(e.target.value)}>
@@ -383,14 +396,21 @@
                                                             <div className="flex justify-between items-center border-b border-white/5 pb-1">
                                                                 <span className="font-bold text-white text-sm">🍲 {c.name}</span>
                                                                 <div className="flex items-center gap-3">
-                                                                    <span className="text-xs text-blue-400 font-mono font-bold">{Math.round(c.kcal)} kcal | {Math.round(c.protein)}g Pro</span>
+                                                                    <span className="text-xs text-blue-400 font-mono font-bold">{Math.round(c.kcal)} kcal | {Math.round(c.protein)}g Pro | {Math.round(c.fat)}g Fat | {Math.round(c.carbs)}g Carb | {c.servings} servings</span>
                                                                     <i onClick={() => backend.request(JSON.stringify({action: 'manage_nutrition', sub: 'delete_composite', id: c.id})).then(res=>{const d=JSON.parse(res);setIngredients(d.ingredients);setCompositeFoods(d.composite_foods);})} className="fas fa-trash text-red-500 cursor-pointer opacity-50 hover:opacity-100"></i>
                                                                 </div>
                                                             </div>
+                                                            {c.instructions && (
+                                                                <div className="text-[9px] text-gray-400 italic mb-1 px-2 bg-black/30 rounded p-1">{c.instructions}</div>
+                                                            )}
                                                             <div className="flex flex-wrap gap-1">
                                                                 {c.parts.map((p, idx) => (
                                                                     <span key={idx} className="text-[9px] bg-white/10 text-gray-300 px-2 py-0.5 rounded-full">{p.amount_grams}g {p.name}</span>
                                                                 ))}
+                                                            </div>
+                                                            <div className="text-[9px] text-gray-500 flex gap-4">
+                                                                {c.prep_time_min > 0 && <span>⏱️ Prep: {c.prep_time_min}min</span>}
+                                                                {c.cook_time_min > 0 && <span>🔥 Cook: {c.cook_time_min}min</span>}
                                                             </div>
                                                         </div>
                                                     ))}
