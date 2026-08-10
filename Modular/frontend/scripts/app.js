@@ -3,12 +3,13 @@
         const DEFAULT_LAYOUT = [
             { id: 'clock', type: 'Clock', size: 'half', visible: true, order: 0 },
             { id: 'targets', type: 'GlobalTargets', size: 'half', visible: true, order: 1 },
-            { id: 'calendar', type: 'Calendar', size: 'full', visible: true, order: 2 },
-            { id: 'matrix', type: 'GitHubMatrix', size: 'full', visible: true, order: 3 },
-            { id: 'habits', type: 'HabitsWidget', size: 'half', visible: true, order: 4 },
-            { id: 'metrics', type: 'MetricsWidget', size: 'half', visible: true, order: 5 },
-            { id: 'architecture', type: 'ArchitectureWidget', size: 'full', visible: true, order: 6 },
-            { id: 'health_trends', type: 'HealthTrends', size: 'full', visible: true, order: 7 }
+            { id: 'daily_checkin', type: 'DailyCheckin', size: 'half', visible: true, order: 2 },
+            { id: 'calendar', type: 'Calendar', size: 'full', visible: true, order: 3 },
+            { id: 'matrix', type: 'GitHubMatrix', size: 'full', visible: true, order: 4 },
+            { id: 'habits', type: 'HabitsWidget', size: 'half', visible: true, order: 5 },
+            { id: 'metrics', type: 'MetricsWidget', size: 'half', visible: true, order: 6 },
+            { id: 'architecture', type: 'ArchitectureWidget', size: 'full', visible: true, order: 7 },
+            { id: 'health_trends', type: 'HealthTrends', size: 'full', visible: true, order: 8 }
         ];
 
         const App = () => {
@@ -57,6 +58,9 @@
             const [studiedHours, setStudiedHours] = useState({});
             const [showScanModal, setShowScanModal] = useState(false);
             const [scanEditData, setScanEditData] = useState({});
+            
+            // Daily Check-in / Analytics
+            const [dailyMetrics, setDailyMetrics] = useState(null);
 
             // Auto-collapse sidebar on smaller screens
             useEffect(() => {
@@ -235,6 +239,12 @@
                                 if (d.today_sessions) setTodaySessions(d.today_sessions);
                                 if (d.studied_hours) setStudiedHours(d.studied_hours);
                             });
+                            
+                            // Fetch daily check-in
+                            py.request(JSON.stringify({action: 'manage_analytics', sub: 'get_daily_checkin'})).then(r => {
+                                const d = JSON.parse(r);
+                                if (d.date) setDailyMetrics(d);
+                            });
                         });
                     });
                 }
@@ -254,7 +264,7 @@
             
             const renderContent = () => {
                 switch(currentView) {
-                    case 'dashboard': return <DashboardView layout={layout} setLayout={setLayout} goals={goals} isEditingLayout={isEditingLayout} setIsEditingLayout={setIsEditingLayout} clockFeed={clockFeed} heatmap={heatmap} habits={habits} habitLogs={habitLogs} metrics={metrics} backend={backend} refreshGoals={refreshGoals} healthProfile={healthProfile} healthLogs={healthLogs} studiedHours={studiedHours} courseColors={courseColors} />;
+                    case 'dashboard': return <DashboardView layout={layout} setLayout={setLayout} goals={goals} isEditingLayout={isEditingLayout} setIsEditingLayout={setIsEditingLayout} clockFeed={clockFeed} heatmap={heatmap} habits={habits} habitLogs={habitLogs} metrics={metrics} backend={backend} refreshGoals={refreshGoals} healthProfile={healthProfile} healthLogs={healthLogs} studiedHours={studiedHours} courseColors={courseColors} dailyMetrics={dailyMetrics} setDailyMetrics={setDailyMetrics} />;
                     case 'health': return <HealthFitnessView backend={backend} healthProfile={healthProfile} setHealthProfile={setHealthProfile} healthLogs={healthLogs} setHealthLogs={setHealthLogs} customFoods={customFoods} customActivities={customActivities} healthPlans={healthPlans} ingredients={ingredients} setIngredients={setIngredients} compositeFoods={compositeFoods} setCompositeFoods={setCompositeFoods} onScanParsed={(data) => { setScanEditData(data); setShowScanModal(true); }} />;
                     case 'hub': return <ProductivityHubView backend={backend} timerState={timerState} flatGoals={flatGoals} queue={queue} refreshQueue={setQueue} settings={settings} todaySessions={todaySessions} courseColors={courseColors} />;
                     case 'architecture': return <LifeArchitectureView goals={goals} backend={backend} refreshGoals={(d) => {setGoals(d.goals); setFlatGoals(d.flat_goals);}} courseColors={courseColors} />;

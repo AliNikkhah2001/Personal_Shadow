@@ -86,6 +86,7 @@ from handlers.note import NoteHandler
 from handlers.nutrition import NutritionHandler
 from handlers.queue import QueueHandler
 from handlers.sync import SyncHandler
+from handlers.analytics import AnalyticsHandler
 from horology import draw_clock_complications, draw_clock_face, draw_clock_ticks_and_indices, draw_horological_hand
 from sync_manager import SyncManager
 from ui import OverlayWidget, AdvancedPDFWindow, TimelapseDialog
@@ -213,6 +214,7 @@ class SystemBridge(QObject):
             NoteHandler(self),
             QueueHandler(self),
             SyncHandler(self),
+            AnalyticsHandler(self),
         ]
 
     # --- Handler Dispatch ---

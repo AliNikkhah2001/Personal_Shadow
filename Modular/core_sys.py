@@ -109,6 +109,7 @@ class DatabaseManager:
             CREATE TABLE IF NOT EXISTS composite_foods (id INTEGER PRIMARY KEY, uuid TEXT UNIQUE, modified_at TEXT, name TEXT UNIQUE, image_path TEXT, instructions TEXT, prep_time_min INTEGER DEFAULT 0, cook_time_min INTEGER DEFAULT 0, servings INTEGER DEFAULT 1);
             CREATE TABLE IF NOT EXISTS recipe_ingredients (id INTEGER PRIMARY KEY, uuid TEXT UNIQUE, modified_at TEXT, composite_food_id INTEGER, ingredient_id INTEGER, amount_grams REAL, FOREIGN KEY(composite_food_id) REFERENCES composite_foods(id), FOREIGN KEY(ingredient_id) REFERENCES ingredients(id));
             CREATE TABLE IF NOT EXISTS food_logs (id INTEGER PRIMARY KEY, uuid TEXT UNIQUE, modified_at TEXT, date TEXT, meal_type TEXT, food_type TEXT, food_id INTEGER, amount_grams REAL, uuid_ref TEXT);
+            CREATE TABLE IF NOT EXISTS daily_metrics (id INTEGER PRIMARY KEY, uuid TEXT UNIQUE, modified_at TEXT, date TEXT UNIQUE, sleep_hours REAL, sleep_quality INTEGER, energy_level INTEGER, mood_tags TEXT, stress_level INTEGER, notes TEXT);
         ''')
         self.safe_commit()
 
@@ -120,7 +121,8 @@ class DatabaseManager:
             "courses", "pomodoro_sessions", "cascading_goals", "habits",
             "habit_logs", "flashcards", "quizzes", "focus_queue", "notes",
             "health_profile", "health_logs", "custom_foods", "custom_activities", "health_plans", "activity_logs",
-            "ingredients", "composite_foods", "recipe_ingredients", "food_logs"
+            "ingredients", "composite_foods", "recipe_ingredients", "food_logs",
+            "daily_metrics"
         ]
 
         # Column migrations for existing tables
