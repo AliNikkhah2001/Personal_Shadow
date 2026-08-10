@@ -191,7 +191,7 @@
                                 <button onClick={fetchFiles} className="glass-button w-full py-2 rounded text-[10px] font-bold tracking-widest text-blue-300 uppercase shadow-lg mb-2 border border-blue-500/30"><i className="fas fa-sync mr-1"></i> Refresh Folder</button>
                                 {files.length === 0 && <div className="text-[10px] text-gray-500 italic mt-2">Place PDFs in ~/MindPalace_Library</div>}
                                 {files.map(f => (
-                                    <div key={f} onClick={() => loadPdf(f)} className={`p-3 text-xs rounded cursor-pointer border truncate transition-all ${activeFile === f ? 'bg-blue-600/30 border-blue-400 text-white shadow-[0_0_10px_rgba(59,130,246,0.5)]' : 'bg-white/5 border-white/10 hover:bg-white/10 text-gray-300'}`}>{f}</div>
+                                    <div key={f.name} onClick={() => loadPdf(f.name)} className={`p-3 text-xs rounded cursor-pointer border truncate transition-all ${activeFile === f.name ? 'bg-blue-600/30 border-blue-400 text-white shadow-[0_0_10px_rgba(59,130,246,0.5)]' : 'bg-white/5 border-white/10 hover:bg-white/10 text-gray-300'}`}>{f.name}</div>
                                 ))}
                             </div>
                         )}
