@@ -394,6 +394,82 @@
             );
         };
 
+const CorrelationChartsWidget = ({ backend, correlations, insights }) => {
+            const chartRef = useRef(null);
+            
+            useEffect(() => {
+                if (chartRef.current && window.Chart && correlations) {
+                    const ctx = chartRef.current.getContext('2d');
+                    
+                    const corrData = Object.entries(correlations).filter(([k, v]) => !isNaN(v) && v !== null);
+                    if (corrData.length === 0) return;
+                    
+                    const labels = corrData.map(([k]) => k.replace(/_/g, ' ').replace(/ vs /g, ' vs ').replace(/([A-Z])/g, ' $1').trim());
+                    const values = corrData.map(([, v]) => Math.round(v * 100) / 100);
+                    const colors = values.map(v => v > 0.3 ? '#22c55e' : v < -0.3 ? '#ef4444' : v > 0 ? '#84cc16' : v < 0 ? '#f97316' : '#64748b');
+                    
+                    let chartInstance = new window.Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: 'Correlation Coefficient',
+                                data: values,
+                                backgroundColor: colors,
+                                borderColor: colors.map(c => c + 'CC'),
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            indexAxis: 'y',
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                x: { 
+                                    min: -1, max: 1,
+                                    ticks: { color: 'gray', stepSize: 0.5 },
+                                    grid: { color: 'rgba(255,255,255,0.1)' }
+                                },
+                                y: { ticks: { color: 'white', font: { size: 10 } } }
+                            },
+                            plugins: { 
+                                legend: { display: false },
+                                tooltip: {
+                                    callbacks: {
+                                        label: (ctx) => {
+                                            const v = ctx.raw;
+                                            let strength = Math.abs(v) > 0.7 ? 'Strong' : Math.abs(v) > 0.3 ? 'Moderate' : 'Weak';
+                                            return `r = ${v.toFixed(2)} (${strength})`;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                    return () => chartInstance.destroy();
+                }
+            }, [correlations]);
+
+            return (
+                <div className="p-4 h-full flex flex-col w-full">
+                    <h3 className="text-gray-300 font-bold uppercase tracking-widest text-sm border-b border-white/10 pb-2 mb-4">Behavioral Correlations</h3>
+                    <div className="flex-grow relative min-h-[200px]">
+                        <canvas ref={chartRef}></canvas>
+                    </div>
+                    {insights && insights.length > 0 && (
+                        <div className="mt-4 flex flex-col gap-2 max-h-40 overflow-y-auto">
+                            {insights.map((insight, i) => (
+                                <div key={i} className={`text-xs p-2 rounded border-l-4 ${insight.type === 'positive' ? 'bg-green-900/30 border-green-500' : insight.type === 'warning' ? 'bg-yellow-900/30 border-yellow-500' : insight.type === 'negative' ? 'bg-red-900/30 border-red-500' : 'bg-blue-900/30 border-blue-500'}`}>
+                                    <div className="font-bold text-white mb-1">{insight.title}</div>
+                                    <div className="text-gray-300">{insight.description}</div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
 const DashboardHealthWidget = ({ healthProfile, healthLogs }) => {
             const chartRef = useRef(null);
             
@@ -474,6 +550,7 @@ const DashboardHealthWidget = ({ healthProfile, healthLogs }) => {
                     case 'ArchitectureWidget': return <DashboardArchitectureWidget goals={goals} studiedHours={studiedHours} courseColors={courseColors} />;
                     case 'HealthTrends': return <DashboardHealthWidget healthProfile={healthProfile} healthLogs={healthLogs} />;
                     case 'DailyCheckin': return <DailyCheckinWidget backend={backend} dailyMetrics={dailyMetrics} setDailyMetrics={setDailyMetrics} />;
+                    case 'CorrelationCharts': return <CorrelationChartsWidget backend={backend} correlations={correlations} insights={insights} />;
                     default: return null;
                 }
             };
