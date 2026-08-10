@@ -34,7 +34,7 @@ class NutritionHandler(ActionHandler):
 
     def _get_all(self) -> str:
         db.c.execute(
-            "SELECT id, name, kcal, protein, fat, carbs, image_path, is_iranian FROM ingredients ORDER BY name"
+            "SELECT id, name, kcal, protein, fat, carbs, serving_size, serving_unit, category, image_path, is_iranian FROM ingredients ORDER BY name"
         )
         ingredients = [
             {
@@ -44,15 +44,18 @@ class NutritionHandler(ActionHandler):
                 "protein": r[3],
                 "fat": r[4],
                 "carbs": r[5],
-                "image_path": r[6],
-                "is_iranian": r[7],
+                "serving_size": r[6],
+                "serving_unit": r[7],
+                "category": r[8],
+                "image_path": r[9],
+                "is_iranian": r[10],
             }
             for r in db.c.fetchall()
         ]
 
-        db.c.execute("SELECT id, name, image_path FROM composite_foods ORDER BY name")
+        db.c.execute("SELECT id, name, image_path, instructions, prep_time_min, cook_time_min, servings FROM composite_foods ORDER BY name")
         composites = []
-        for c_id, c_name, c_img in db.c.fetchall():
+        for c_id, c_name, c_img, c_instructions, c_prep, c_cook, c_servings in db.c.fetchall():
             db.c.execute(
                 "SELECT i.name, ri.amount_grams, i.kcal, i.protein, i.fat, i.carbs "
                 "FROM recipe_ingredients ri JOIN ingredients i ON ri.ingredient_id = i.id "
@@ -65,19 +68,31 @@ class NutritionHandler(ActionHandler):
                     "amount_grams": r[1],
                     "kcal": (r[2] * r[1] / 100.0),
                     "protein": (r[3] * r[1] / 100.0),
+                    "fat": (r[4] * r[1] / 100.0),
+                    "carbs": (r[5] * r[1] / 100.0),
                 }
                 for r in db.c.fetchall()
             ]
             total_kcal = sum(p["kcal"] for p in parts)
             total_protein = sum(p["protein"] for p in parts)
+            total_fat = sum(p["fat"] for p in parts)
+            total_carbs = sum(p["carbs"] for p in parts)
+            per_serving_kcal = total_kcal / c_servings if c_servings > 0 else total_kcal
             composites.append(
                 {
                     "id": c_id,
                     "name": c_name,
                     "image_path": c_img,
+                    "instructions": c_instructions,
+                    "prep_time_min": c_prep,
+                    "cook_time_min": c_cook,
+                    "servings": c_servings,
                     "parts": parts,
                     "kcal": total_kcal,
                     "protein": total_protein,
+                    "fat": total_fat,
+                    "carbs": total_carbs,
+                    "per_serving_kcal": per_serving_kcal,
                 }
             )
 
@@ -86,8 +101,8 @@ class NutritionHandler(ActionHandler):
     def _add_ingredient(self, req: dict[str, Any]) -> str:
         try:
             db.c.execute(
-                "INSERT INTO ingredients (uuid, modified_at, name, kcal, protein, fat, carbs, image_path, is_iranian) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO ingredients (uuid, modified_at, name, kcal, protein, fat, carbs, serving_size, serving_unit, category, image_path, is_iranian) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     __import__("uuid").uuid4().hex,
                     datetime.now().isoformat(),
@@ -96,6 +111,9 @@ class NutritionHandler(ActionHandler):
                     float(req.get("protein") or 0),
                     float(req.get("fat") or 0),
                     float(req.get("carbs") or 0),
+                    req.get("serving_size", 100),
+                    req.get("serving_unit", "g"),
+                    req.get("category", "General"),
                     req.get("image_path", ""),
                     req.get("is_iranian", False),
                 ),
@@ -117,8 +135,8 @@ class NutritionHandler(ActionHandler):
         c_uuid = uuid_mod.uuid4().hex
         try:
             db.c.execute(
-                "INSERT INTO composite_foods (uuid, modified_at, name, image_path) VALUES (?, ?, ?, ?)",
-                (c_uuid, datetime.now().isoformat(), req.get("name"), req.get("image_path", "")),
+                "INSERT INTO composite_foods (uuid, modified_at, name, image_path, instructions, prep_time_min, cook_time_min, servings) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (c_uuid, datetime.now().isoformat(), req.get("name"), req.get("image_path", ""), req.get("instructions", ""), int(req.get("prep_time_min") or 0), int(req.get("cook_time_min") or 0), int(req.get("servings") or 1)),
             )
             c_id = db.c.lastrowid
             for part in req.get("parts", []):

@@ -105,6 +105,10 @@ class DatabaseManager:
             CREATE TABLE IF NOT EXISTS health_plans (id INTEGER PRIMARY KEY, type TEXT, title TEXT, details TEXT, uuid TEXT UNIQUE, modified_at TEXT);
             CREATE TABLE IF NOT EXISTS activity_logs (id INTEGER PRIMARY KEY, timestamp TEXT, module TEXT, description TEXT, uuid TEXT UNIQUE, modified_at TEXT);
             CREATE TABLE IF NOT EXISTS deleted_uuids(table_name TEXT, uuid TEXT, deleted_at TEXT, PRIMARY KEY (table_name, uuid));
+            CREATE TABLE IF NOT EXISTS ingredients (id INTEGER PRIMARY KEY, uuid TEXT UNIQUE, modified_at TEXT, name TEXT UNIQUE, kcal REAL, protein REAL, fat REAL, carbs REAL, serving_size REAL DEFAULT 100, serving_unit TEXT DEFAULT 'g', category TEXT DEFAULT 'General', image_path TEXT, is_iranian INTEGER DEFAULT 0);
+            CREATE TABLE IF NOT EXISTS composite_foods (id INTEGER PRIMARY KEY, uuid TEXT UNIQUE, modified_at TEXT, name TEXT UNIQUE, image_path TEXT, instructions TEXT, prep_time_min INTEGER DEFAULT 0, cook_time_min INTEGER DEFAULT 0, servings INTEGER DEFAULT 1);
+            CREATE TABLE IF NOT EXISTS recipe_ingredients (id INTEGER PRIMARY KEY, uuid TEXT UNIQUE, modified_at TEXT, composite_food_id INTEGER, ingredient_id INTEGER, amount_grams REAL, FOREIGN KEY(composite_food_id) REFERENCES composite_foods(id), FOREIGN KEY(ingredient_id) REFERENCES ingredients(id));
+            CREATE TABLE IF NOT EXISTS food_logs (id INTEGER PRIMARY KEY, uuid TEXT UNIQUE, modified_at TEXT, date TEXT, meal_type TEXT, food_type TEXT, food_id INTEGER, amount_grams REAL, uuid_ref TEXT);
         ''')
         self.safe_commit()
 
@@ -115,8 +119,24 @@ class DatabaseManager:
         tables_to_sync = [
             "courses", "pomodoro_sessions", "cascading_goals", "habits",
             "habit_logs", "flashcards", "quizzes", "focus_queue", "notes",
-            "health_profile", "health_logs", "custom_foods", "custom_activities", "health_plans", "activity_logs"
+            "health_profile", "health_logs", "custom_foods", "custom_activities", "health_plans", "activity_logs",
+            "ingredients", "composite_foods", "recipe_ingredients", "food_logs"
         ]
+
+        # Column migrations for existing tables
+        column_migrations = {
+            "ingredients": [
+                ("serving_size", "REAL DEFAULT 100"),
+                ("serving_unit", "TEXT DEFAULT 'g'"),
+                ("category", "TEXT DEFAULT 'General'"),
+            ],
+            "composite_foods": [
+                ("instructions", "TEXT DEFAULT ''"),
+                ("prep_time_min", "INTEGER DEFAULT 0"),
+                ("cook_time_min", "INTEGER DEFAULT 0"),
+                ("servings", "INTEGER DEFAULT 1"),
+            ],
+        }
 
         self.c.execute("SELECT name FROM sqlite_master WHERE type='table'")
         existing = [r[0] for r in self.c.fetchall()]
@@ -134,6 +154,16 @@ class DatabaseManager:
                     print(f"[DB Migration] Upgraded table: {table}")
                 except Exception as e:
                     print(f"Migration error on {table}: {e}")
+
+            # Add missing columns for nutrition tables
+            if table in column_migrations:
+                for col_name, col_def in column_migrations[table]:
+                    if col_name not in cols:
+                        try:
+                            self.c.execute(f"ALTER TABLE {table} ADD COLUMN {col_name} {col_def}")
+                            print(f"[DB Migration] Added column {col_name} to {table}")
+                        except Exception as e:
+                            print(f"Migration error adding {col_name} to {table}: {e}")
 
             self.c.execute(f"SELECT id FROM {table} WHERE uuid IS NULL")
             rows = self.c.fetchall()

@@ -143,6 +143,54 @@ class TestConfig(unittest.TestCase):
         self.config.set("timeline_pixel_per_hour", 120)
 
 
+class TestNutritionSchema(unittest.TestCase):
+    """Test nutrition database schema."""
+    
+    def setUp(self):
+        from core_sys import db
+        self.db = db
+    
+    def test_ingredients_table_exists(self):
+        self.db.c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='ingredients'")
+        result = self.db.c.fetchone()
+        self.assertIsNotNone(result)
+        self.assertEqual(result[0], "ingredients")
+    
+    def test_composite_foods_table_exists(self):
+        self.db.c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='composite_foods'")
+        result = self.db.c.fetchone()
+        self.assertIsNotNone(result)
+        self.assertEqual(result[0], "composite_foods")
+    
+    def test_recipe_ingredients_table_exists(self):
+        self.db.c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='recipe_ingredients'")
+        result = self.db.c.fetchone()
+        self.assertIsNotNone(result)
+        self.assertEqual(result[0], "recipe_ingredients")
+    
+    def test_food_logs_table_exists(self):
+        self.db.c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='food_logs'")
+        result = self.db.c.fetchone()
+        self.assertIsNotNone(result)
+        self.assertEqual(result[0], "food_logs")
+    
+    def test_ingredients_schema(self):
+        self.db.c.execute("PRAGMA table_info(ingredients)")
+        cols = [col[1] for col in self.db.c.fetchall()]
+        expected_cols = ["id", "uuid", "modified_at", "name", "kcal", "protein", "fat", "carbs", 
+                         "serving_size", "serving_unit", "category", "image_path", "is_iranian"]
+        for col in expected_cols:
+            self.assertIn(col, cols, f"Column {col} missing from ingredients table")
+    
+    def test_composite_foods_schema(self):
+        self.db.c.execute("PRAGMA table_info(composite_foods)")
+        cols = [col[1] for col in self.db.c.fetchall()]
+        expected_cols = ["id", "uuid", "modified_at", "name", "image_path", "instructions", 
+                         "prep_time_min", "cook_time_min", "servings"]
+        for col in expected_cols:
+            self.assertIn(col, cols, f"Column {col} missing from composite_foods table")
+
+
 class TestSystemBridgeDispatch(unittest.TestCase):
     """Test the SystemBridge request dispatcher."""
 
