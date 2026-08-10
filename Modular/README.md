@@ -27,116 +27,146 @@ It is designed to seamlessly track your focus, map your knowledge spatially, ana
 
 ## 🏗️ Architecture
 
-### Backend (Python/PyQt6)
-The backend uses a **handler-based architecture** for clean separation of concerns:
+### System Overview
 
 ```
-React Frontend (index.html)
+┌─────────────────────────────────────────────────────────────────┐
+│                    React Frontend (frontend/)                    │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────────┐  │
+│  │Dashboard │ │  Timer   │ │  Health  │ │  Settings/Notes  │  │
+│  │  Goals   │ │  PDF     │ │  Quiz    │ │  Flashcards      │  │
+│  └────┬─────┘ └────┬─────┘ └────┬─────┘ └────────┬─────────┘  │
+│       └─────────────┴────────────┴────────────────┘             │
+│                         │ api.js                                │
+└─────────────────────────┼───────────────────────────────────────┘
+                          │ QWebChannel
+┌─────────────────────────┼───────────────────────────────────────┐
+│                   Backend (Python/PyQt6)                         │
+│                         │                                       │
+│              ┌──────────▼──────────┐                            │
+│              │   SystemBridge      │                            │
+│              │   (dispatcher)      │                            │
+│              └──────────┬──────────┘                            │
+│                         │                                       │
+│    ┌────────────────────┼────────────────────┐                  │
+│    │                    │                    │                  │
+│    ▼                    ▼                    ▼                  │
+│ ┌──────────┐    ┌──────────────┐    ┌──────────────┐           │
+│ │ Handlers │    │ Core Modules │    │  UI Widgets  │           │
+│ │  (8)     │    │              │    │              │           │
+│ │•Nutrition│    │•core_sys     │    │•overlay      │           │
+│ │•Health   │    │•core_logger  │    │•pdf_editor   │           │
+│ │•Habit    │    │•vision_track │    │•timelapse    │           │
+│ │•Flashcard│    │•sync_manager │    │              │           │
+│ │•Goal     │    │•horology     │    │              │           │
+│ │•Note     │    │              │    │              │           │
+│ │•Queue    │    │              │    │              │           │
+│ │•Sync     │    │              │    │              │           │
+│ └──────────┘    └──────────────┘    └──────────────┘           │
+│                                                                 │
+│              ┌──────────────┐                                   │
+│              │  SQLite DB   │                                   │
+│              │ second_brain │                                   │
+│              └──────────────┘                                   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Handler Dispatch Flow
+
+```
+Frontend request (JSON)
     │
     ▼
-QWebChannel (JavaScript ↔ Python bridge)
+SystemBridge.request(payload)
     │
-    ▼
-SystemBridge (dispatcher)
+    ├──► _dispatch(action, req) ──► handlers[i].handle(action, req)
+    │      │
+    │      ├── NutritionHandler.handle() → manage_nutrition
+    │      ├── HealthHandler.handle()    → manage_health, save_body_scan
+    │      ├── HabitHandler.handle()     → manage_habit
+    │      ├── FlashcardHandler.handle() → manage_flashcard, manage_quiz
+    │      ├── GoalHandler.handle()      → manage_goal
+    │      ├── NoteHandler.handle()      → manage_note
+    │      ├── QueueHandler.handle()     → manage_queue
+    │      └── SyncHandler.handle()      → sync_now, hard_clone, force_sync
     │
-    ├──► Domain Handlers (handlers/)
-    │    ├── NutritionHandler    → Ingredients, recipes, composite foods
-    │    ├── HealthHandler       → Profiles, logs, foods, activities
-    │    ├── HabitHandler        → Habit definitions, daily logging
-    │    ├── FlashcardHandler    → Flashcards, quizzes
-    │    ├── GoalHandler         → Cascading goals
-    │    ├── NoteHandler         → Notes CRUD
-    │    ├── QueueHandler        → Focus queue management
-    │    └── SyncHandler         → Device synchronization
-    │
-    ├──► Core Modules
-    │    ├── core_sys.py         → ConfigManager, DatabaseManager
-    │    ├── core_logger.py      → Logging framework
-    │    ├── vision_tracker.py   → OpenCV face/eye detection
-    │    ├── sync_manager.py     → Git-based multi-device sync
-    │    └── horology.py         → Analog clock rendering
-    │
-    └──► UI Components (ui/)
-         ├── overlay.py          → Timer overlay widget
-         ├── pdf_editor.py       → Advanced PDF editor window
-         └── timelapse.py        → Timelapse playback dialog
-```
-
-### Frontend (React/Tailwind)
-The frontend is organized into modular components:
-
-```
-frontend/
-├── index.html                  → HTML shell with script loading
-├── styles/main.css             → All CSS styles (glassmorphism)
-└── scripts/
-    ├── utils.js                → Utility functions (Jalali calendar, etc.)
-    ├── api.js                  → Backend API communication layer
-    ├── app.js                  → Main App component + routing
-    └── components/
-        ├── dashboard.js        → Dashboard, calendar, metrics
-        ├── timer.js            → Pomodoro timer, timeline, queue
-        ├── goals.js            → Goals, habits, day summary
-        ├── pdf-viewer.js       → PDF library with annotations
-        ├── library.js          → Quiz engine, flashcards
-        ├── notes.js            → Markdown notes editor
-        ├── health.js           → Health, nutrition, fitness
-        └── settings.js         → Application settings
+    └──► _core_action_handlers[action](req)
+           │
+           ├── _handle_init, _handle_start_timer, _handle_stop_timer
+           ├── _handle_save_settings, _handle_export_data
+           └── ... (35+ core actions)
 ```
 
 ## 📁 Project Structure
 
 ```
 Modular/
-├── main.py                      # Application entry point
-├── system_bridge.py             # Central backend dispatcher
-├── core_sys.py                  # Config + Database management
-├── core_logger.py               # Logging framework
-├── sync_manager.py              # Git-based multi-device sync
-├── vision_tracker.py            # OpenCV attention tracking
-├── horology.py                  # Analog clock rendering
-├── health_parser.py             # OCR body scan parser
-├── dependency_checker.py        # Dependency diagnostics
-├── migrate_db.py                # Database migration utility
-├── library.py                   # PDF library widget
-├── native_pdf_editor.py         # Standalone PDF editor
 │
-├── handlers/                    # Domain action handlers
-│   ├── __init__.py              # Base ActionHandler class
-│   ├── nutrition.py             # Ingredients, recipes
-│   ├── health.py                # Health profiles, logs
-│   ├── habit.py                 # Habit tracking
-│   ├── flashcard.py             # Flashcards, quizzes
-│   ├── goal.py                  # Cascading goals
-│   ├── note.py                  # Notes management
-│   ├── queue.py                 # Focus queue
-│   └── sync.py                  # Device synchronization
+├── 📄 main.py                          # Application entry point (190 lines)
+├── 📄 system_bridge.py                 # Central backend dispatcher (1556 lines)
+├── 📄 core_sys.py                      # Config + Database management (156 lines)
+├── 📄 core_logger.py                   # Logging framework (54 lines)
+├── 📄 sync_manager.py                  # Git-based multi-device sync (421 lines)
+├── 📄 vision_tracker.py                # OpenCV attention tracking (209 lines)
+├── 📄 horology.py                      # Analog clock rendering (102 lines)
+├── 📄 health_parser.py                 # OCR body scan parser (88 lines)
+├── 📄 dependency_checker.py            # Dependency diagnostics (78 lines)
+├── 📄 migrate_db.py                    # Database migration utility (53 lines)
+├── 📄 library.py                       # PDF library widget (303 lines)
+├── 📄 native_pdf_editor.py             # Standalone PDF editor (334 lines)
 │
-├── ui/                          # Reusable UI components
-│   ├── __init__.py              # Package exports
-│   ├── overlay.py               # Timer overlay widget
-│   ├── pdf_editor.py            # PDF editor window
-│   └── timelapse.py             # Timelapse dialog
+├── 📁 handlers/                        # Domain action handlers
+│   ├── __init__.py                     # Base ActionHandler class
+│   ├── nutrition.py                    # Ingredients, recipes, composite foods
+│   ├── health.py                       # Health profiles, logs, foods, activities
+│   ├── habit.py                        # Habit definitions, daily logging
+│   ├── flashcard.py                    # Flashcards, quizzes
+│   ├── goal.py                         # Cascading goals
+│   ├── note.py                         # Notes CRUD
+│   ├── queue.py                        # Focus queue management
+│   └── sync.py                         # Device synchronization
 │
-├── frontend/                    # React frontend
-│   ├── index.html               # HTML shell
-│   ├── styles/main.css          # CSS styles
-│   └── scripts/                 # JavaScript modules
-│       ├── utils.js             # Utilities
-│       ├── api.js               # API layer
-│       ├── app.js               # Main App
-│       └── components/          # View components
+├── 📁 ui/                              # Reusable UI components
+│   ├── __init__.py                     # Package exports
+│   ├── overlay.py                      # Timer overlay widget
+│   ├── pdf_editor.py                   # PDF editor window
+│   └── timelapse.py                    # Timelapse dialog
 │
-├── tests/                       # Test suite
-│   └── test_backend.py          # Backend tests
+├── 📁 frontend/                        # React frontend
+│   ├── index.html                      # HTML shell (entry point)
+│   ├── styles/
+│   │   └── main.css                    # All CSS styles (glassmorphism)
+│   └── scripts/
+│       ├── utils.js                    # Utility functions (Jalali calendar)
+│       ├── api.js                      # Backend API communication layer
+│       ├── app.js                      # Main App component + routing
+│       └── components/
+│           ├── dashboard.js            # Dashboard, calendar, metrics
+│           ├── timer.js                # Pomodoro timer, timeline, queue
+│           ├── goals.js                # Goals, habits, day summary
+│           ├── pdf-viewer.js           # PDF library with annotations
+│           ├── library.js              # Quiz engine, flashcards
+│           ├── notes.js                # Markdown notes editor
+│           ├── health.js               # Health, nutrition, fitness
+│           └── settings.js             # Application settings
 │
-├── tools/                       # Utilities
-│   └── data_import.py           # API data importer
+├── 📁 tests/                           # Test suite
+│   ├── __init__.py
+│   └── test_backend.py                 # Backend tests (13 tests)
 │
-├── requirements.txt             # Python dependencies
-├── pyproject.toml               # Ruff linter/formatter config
-└── config.json                  # Application settings
+├── 📁 tools/                           # Utilities
+│   └── data_import.py                  # API data importer
+│
+├── 📄 requirements.txt                 # Python dependencies
+├── 📄 pyproject.toml                   # Ruff linter/formatter config
+└── 📄 config.json                      # Application settings
 ```
+
+### File Size Guidelines
+- **Max 500 lines** per module (except complex UI components)
+- **Max 850 lines** for frontend view components
+- **Single responsibility** per file
+- **Clear naming** convention
 
 ## ✨ Current Features
 
@@ -200,6 +230,15 @@ Create a `.env` file in the project root:
 ```
 GITHUB_TOKEN = your_github_personal_access_token
 ```
+
+### Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| `module 'cv2' has no attribute 'CascadeClassifier'` | OpenCV 5.x removed legacy cascades; the app now falls back to motion detection |
+| `ModuleNotFoundError: No module named 'machineid'` | Install with `pip install py-machineid` |
+| `Port 5050 already in use` | Another instance is running or port is occupied; kill the process or change port |
+| `Git sync fails` | Verify `GITHUB_TOKEN` is set and has repo permissions |
 
 ## ⚙️ Configuration
 
