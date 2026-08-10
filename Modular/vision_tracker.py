@@ -123,7 +123,7 @@ class VisionTracker(QObject):
         self.v_path = path
         self.last_frame_time = time.time()
         os.makedirs("timelapses", exist_ok=True)
-        self.writer = cv2.VideoWriter(self.v_path, cv2.VideoWriter_fourcc(*'MJPG'), 1.0, (640, 480))
+        self.writer = cv2.VideoWriter(self.v_path, cv2.VideoWriter_fourcc(*'MJPG'), 15.0, (640, 480))
 
     def stop_rec(self):
         self.is_rec = False
@@ -167,28 +167,22 @@ class VisionTracker(QObject):
         min_s = int(config.get("face_min_size", 120))
 
         att = False
-        fg = self.bg_sub.apply(cv2.GaussianBlur(gray, (21, 21), 0))
-        _, fg = cv2.threshold(fg, 200, 255, cv2.THRESH_BINARY)
-        motion_detected = cv2.countNonZero(fg) > 3000
-
-        if self.fc is not None and "Presence" not in mode:
-            # Use Haar cascade face detection (OpenCV 4.x)
-            faces = self.fc.detectMultiScale(gray, scale, min_n, minSize=(min_s, min_s))
+        if "Presence" in mode:
+            fg = self.bg_sub.apply(cv2.GaussianBlur(gray, (21, 21), 0))
+            _, fg = cv2.threshold(fg, 200, 255, cv2.THRESH_BINARY)
+            if cv2.countNonZero(fg) > 3000 or len(self.fc.detectMultiScale(gray, scale, min_n, minSize=(min_s,min_s))) > 0:
+                att = True
+        else:
+            faces = self.fc.detectMultiScale(gray, scale, min_n, minSize=(min_s,min_s))
             if len(faces) > 0:
-                (x, y, w, h) = sorted(faces, key=lambda f: f[2] * f[3], reverse=True)[0]
-                cv2.rectangle(frm, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                (x,y,w,h) = sorted(faces, key=lambda f: f[2]*f[3], reverse=True)[0]
+                cv2.rectangle(frm, (x,y), (x+w,y+h), (0,255,0), 2)
                 if "Visible" in mode:
                     att = True
-                elif self.ec is not None:
-                    eyes = self.ec.detectMultiScale(
-                        gray[y : y + int(h / 2), x : x + w], 1.1, 10, minSize=(20, 20)
-                    )
+                else:
+                    eyes = self.ec.detectMultiScale(gray[y:y+int(h/2), x:x+w], 1.1, 10, minSize=(20,20))
                     if len(eyes) > 0:
                         att = True
-        else:
-            # Fallback: motion-based presence detection (OpenCV 5.x or Presence mode)
-            if motion_detected:
-                att = True
 
         fps = max(1, 1000 // int(config.get("vision_sample_interval", 30)))
         delay_frames = int(config.get("dist_delay", 3)) * fps

@@ -4,6 +4,13 @@ const ProductivityHubView = ({ backend, timerState, flatGoals, queue, refreshQue
             const [showProcessList, setShowProcessList] = useState(false); const [selectedProcesses, setSelectedProcesses] = useState([]);
             const [isPaused, setIsPaused] = useState(false);
             
+            // Timeline Config from settings
+            const timelineStartHour = settings?.timeline_start_hour ?? 0;
+            const timelineEndHour = settings?.timeline_end_hour ?? 24;
+            const timelinePixelPerHour = settings?.timeline_pixel_per_hour ?? 120;
+            const timelineHours = timelineEndHour - timelineStartHour;
+            const timelineWidth = timelineHours * timelinePixelPerHour;
+
             // History Tab States
             const [historyData, setHistoryData] = useState([]);
             const [selectedDateFilter, setSelectedDateFilter] = useState("");
@@ -28,7 +35,9 @@ const ProductivityHubView = ({ backend, timerState, flatGoals, queue, refreshQue
                 if (activeTab === 'timeline' && timelineContainerRef.current) {
                     const now = new Date();
                     const mins = now.getHours() * 60 + now.getMinutes();
-                    const scrollTarget = (mins * 2) - (timelineContainerRef.current.clientWidth / 2);
+                    const relativeMins = mins - (timelineStartHour * 60);
+                    const pxPerMin = timelinePixelPerHour / 60;
+                    const scrollTarget = (relativeMins * pxPerMin) - (timelineContainerRef.current.clientWidth / 2);
                     timelineContainerRef.current.scrollLeft = Math.max(0, scrollTarget);
                 }
                 
@@ -120,9 +129,10 @@ const ProductivityHubView = ({ backend, timerState, flatGoals, queue, refreshQue
             };
             const renderTimelineHours = () => {
                 const hours = [];
-                for (let i = 0; i <= 24; i++) {
+                for (let i = timelineStartHour; i <= timelineEndHour; i++) {
+                    const pos = (i - timelineStartHour) * timelinePixelPerHour;
                     hours.push(
-                        <div key={`hr-${i}`} className="absolute top-0 bottom-0 border-l border-white/10 flex flex-col justify-between py-1" style={{ left: `${i * 120}px` }}>
+                        <div key={`hr-${i}`} className="absolute top-0 bottom-0 border-l border-white/10 flex flex-col justify-between py-1" style={{ left: `${pos}px` }}>
                             <span className="text-[10px] text-gray-500 font-bold pl-1 -translate-x-1/2 bg-black/50 px-1 rounded">{i.toString().padStart(2, '0')}:00</span>
                         </div>
                     );
@@ -133,16 +143,17 @@ const ProductivityHubView = ({ backend, timerState, flatGoals, queue, refreshQue
             // PERFECT MATH: Include seconds to prevent block drifting and overlap
             const now = new Date();
             const nowMins = now.getHours() * 60 + now.getMinutes() + (now.getSeconds() / 60);
+            const nowRelativeMins = nowMins - (timelineStartHour * 60);
             
             const tTot = Number(timerState.total_time) || 0;
             const tLeft = Number(timerState.time_left) || 0;
             const workedMins = (tTot > 0) ? ((tTot - tLeft) / 60) : 0;
-            const activeStartMins = nowMins - workedMins;
+            const activeStartMins = nowRelativeMins - workedMins;
             const activeWidthMins = tTot / 60;
             const isActiveSession = timerState.is_running || (tTot > 0 && tLeft < tTot);
             
             // Queue blocks must start *after* the active session to prevent squishing
-            let futureStartMins = isActiveSession ? (activeStartMins + activeWidthMins) : nowMins;
+            let futureStartMins = isActiveSession ? (activeStartMins + activeWidthMins) : nowRelativeMins;
             
             const historyDates = [...new Set(historyData.map(s => s.timestamp.split('T')[0]))];
             const filteredHistory = historyData.filter(s => s.timestamp.split('T')[0] === selectedDateFilter);
@@ -180,13 +191,13 @@ const ProductivityHubView = ({ backend, timerState, flatGoals, queue, refreshQue
                                         </div>
                                     </div>
                                     
-                                    <h3 className="text-gray-400 text-[10px] font-bold tracking-widest uppercase mb-2">Absolute Daily Timeline (00:00 - 24:00)</h3>
+                                    <h3 className="text-gray-400 text-[10px] font-bold tracking-widest uppercase mb-2">Absolute Daily Timeline ({timelineStartHour.toString().padStart(2, '0')}:00 - {timelineEndHour.toString().padStart(2, '0')}:00)</h3>
                                     <div ref={timelineContainerRef} className="w-full h-36 bg-black/60 border border-white/10 rounded-xl overflow-x-auto custom-scrollbar relative shadow-inner shrink-0 cursor-ew-resize">
-                                        <div className="absolute top-0 left-0 h-full" style={{ width: '2880px' }}>
+                                        <div className="absolute top-0 left-0 h-full" style={{ width: `${timelineWidth}px` }}>
                                             {renderTimelineHours()}
                                             
                                             {/* Current Time Line */}
-                                            <div className="absolute top-0 bottom-0 w-0.5 bg-blue-500 shadow-[0_0_10px_#3b82f6] z-50" style={{ left: `${nowMins * 2}px` }}>
+                                            <div className="absolute top-0 bottom-0 w-0.5 bg-blue-500 shadow-[0_0_10px_#3b82f6] z-50" style={{ left: `${nowRelativeMins * (timelinePixelPerHour / 60)}px` }}>
                                                 <div className="absolute -top-1 -translate-x-1/2 w-3 h-3 bg-blue-500 rounded-full"></div>
                                             </div>
 
@@ -194,17 +205,19 @@ const ProductivityHubView = ({ backend, timerState, flatGoals, queue, refreshQue
                                             {todaySessions && todaySessions.map((s, i) => {
                                                 const end = new Date(s.timestamp);
                                                 const endMins = end.getHours() * 60 + end.getMinutes();
+                                                const endRelativeMins = endMins - (timelineStartHour * 60);
                                                 const plannedDur = s.duration;
                                                 const actualDur = s.actual_duration || s.duration;
-                                                const startMins = endMins - actualDur;
+                                                const startRelativeMins = endRelativeMins - actualDur;
+                                                const pxPerMin = timelinePixelPerHour / 60;
                                                 
                                                 return (
                                                     <div key={`past-${i}`} onClick={() => { setStatsSession(s); setShowStatsModal(true); }} className="absolute top-10 h-14 cursor-pointer group" 
-                                                         style={{ left: `${startMins * 2}px`, width: `${Math.max(plannedDur, actualDur) * 2}px` }}>
-                                                        <div className="absolute top-0 left-0 h-full border-2 border-dashed border-white/30 rounded-md pointer-events-none" style={{ width: `${plannedDur * 2}px` }}></div>
+                                                         style={{ left: `${startRelativeMins * pxPerMin}px`, width: `${Math.max(plannedDur, actualDur) * pxPerMin}px` }}>
+                                                        <div className="absolute top-0 left-0 h-full border-2 border-dashed border-white/30 rounded-md pointer-events-none" style={{ width: `${plannedDur * pxPerMin}px` }}></div>
                                                         
                                                         <div className="absolute top-0 left-0 h-full rounded-md shadow-md flex items-center justify-center overflow-hidden border border-white/20"
-                                                             style={{ width: `${actualDur * 2}px`, backgroundColor: getTaskColor(s.course, s.type === 'Break') }}>
+                                                             style={{ width: `${actualDur * pxPerMin}px`, backgroundColor: getTaskColor(s.course, s.type === 'Break') }}>
                                                             <span className="text-[9px] font-bold text-white drop-shadow-md truncate px-1 opacity-0 group-hover:opacity-100 transition-opacity">{s.course}</span>
                                                             
                                                             {s.distraction_data && s.distraction_data.map((d, di) => {
@@ -219,20 +232,20 @@ const ProductivityHubView = ({ backend, timerState, flatGoals, queue, refreshQue
                                                 );
                                             })}
 
-                                            {/* Active Session Pulsing Block */}
+{/* Active Session Pulsing Block */}
                                             {isActiveSession && (
                                                 <div className={`absolute top-10 h-14 rounded-md shadow-[0_0_15px_rgba(255,255,255,0.3)] flex items-center justify-center overflow-hidden border-2 border-white/50 ${timerState.is_running ? 'animate-pulse' : 'opacity-50 grayscale'}`} 
-                                                     style={{ left: `${activeStartMins * 2}px`, width: `${activeWidthMins * 2}px`, backgroundColor: getTaskColor(timerState.course, false) }}>
-                                                     <span className="text-[10px] font-bold text-white drop-shadow-md z-10">{timerState.course}</span>
-                                                     
-                                                     {/* Active Distraction Markers */}
-                                                     {timerState.distraction_log && timerState.distraction_log.map((d, di) => {
-                                                        const dType = d.length > 2 ? d[2] : "Manual";
-                                                        const distColor = dType === "App" ? "bg-orange-500" : (dType === "Camera" ? "bg-red-500" : "bg-yellow-400");
-                                                        return (
-                                                            <div key={di} className={`absolute top-0 h-full ${distColor} z-10 opacity-80`} style={{ left: `${(d[0] / activeWidthMins) * 100}%`, width: `${Math.max((d[1] / activeWidthMins) * 100, 2)}%` }}></div>
-                                                        );
-                                                     })}
+                                                     style={{ left: `${activeStartMins * pxPerMin}px`, width: `${activeWidthMins * pxPerMin}px`, backgroundColor: getTaskColor(timerState.course, false) }}>
+                                                    <span className="text-[10px] font-bold text-white drop-shadow-md z-10">{timerState.course}</span>
+                                                    
+                                                    {/* Active Distraction Markers */}
+                                                    {timerState.distraction_log && timerState.distraction_log.map((d, di) => {
+                                                       const dType = d.length > 2 ? d[2] : "Manual";
+                                                       const distColor = dType === "App" ? "bg-orange-500" : (dType === "Camera" ? "bg-red-500" : "bg-yellow-400");
+                                                       return (
+                                                           <div key={di} className={`absolute top-0 h-full ${distColor} z-10 opacity-80`} style={{ left: `${(d[0] / activeWidthMins) * 100}%`, width: `${Math.max((d[1] / activeWidthMins) * 100, 2)}%` }}></div>
+                                                       );
+                                                    })}
                                                 </div>
                                             )}
                                             
@@ -242,7 +255,7 @@ const ProductivityHubView = ({ backend, timerState, flatGoals, queue, refreshQue
                                                 futureStartMins += q.duration;
                                                 return (
                                                     <div key={`q-${q.id}`} className="absolute top-10 h-14 rounded-md flex items-center justify-center overflow-hidden border border-white/10 opacity-50" 
-                                                         style={{ left: `${start * 2}px`, width: `${q.duration * 2}px`, backgroundColor: getTaskColor(q.course, q.type === 'Break') }}>
+                                                         style={{ left: `${start * pxPerMin}px`, width: `${q.duration * pxPerMin}px`, backgroundColor: getTaskColor(q.course, q.type === 'Break') }}>
                                                         <span className="text-[9px] font-bold text-white drop-shadow-md truncate px-1">{q.duration}m</span>
                                                     </div>
                                                 );

@@ -45,7 +45,8 @@ class ConfigManager:
             "mute_sounds": False, "mute_speech": False,
             "sync_enabled": True, "sync_repo_url": "", "sync_interval": 3600, "sync_local_paths": [],
             "quiet_mode": False, "app_monitoring_enabled": False, "allowed_apps": [], "blocked_apps": [], "auto_block": False,
-            "dashboard_layout": {}
+            "dashboard_layout": {},
+            "timeline_start_hour": 0, "timeline_end_hour": 24, "timeline_pixel_per_hour": 120
         }
         try:
             with open(fn) as f: self.cfg = json.load(f)

@@ -117,6 +117,31 @@ class TestConfig(unittest.TestCase):
         self.config.cfg.pop(test_key, None)
         self.config.set("dummy", "dummy")  # Trigger save
 
+    def test_timeline_config_defaults(self):
+        """Test that timeline configuration defaults are set."""
+        start_hour = self.config.get("timeline_start_hour")
+        end_hour = self.config.get("timeline_end_hour")
+        pixel_per_hour = self.config.get("timeline_pixel_per_hour")
+        
+        self.assertEqual(start_hour, 0)
+        self.assertEqual(end_hour, 24)
+        self.assertEqual(pixel_per_hour, 120)
+
+    def test_timeline_config_set_and_get(self):
+        """Test setting and getting timeline configuration."""
+        self.config.set("timeline_start_hour", 6)
+        self.config.set("timeline_end_hour", 22)
+        self.config.set("timeline_pixel_per_hour", 150)
+        
+        self.assertEqual(self.config.get("timeline_start_hour"), 6)
+        self.assertEqual(self.config.get("timeline_end_hour"), 22)
+        self.assertEqual(self.config.get("timeline_pixel_per_hour"), 150)
+        
+        # Cleanup - reset to defaults
+        self.config.set("timeline_start_hour", 0)
+        self.config.set("timeline_end_hour", 24)
+        self.config.set("timeline_pixel_per_hour", 120)
+
 
 class TestSystemBridgeDispatch(unittest.TestCase):
     """Test the SystemBridge request dispatcher."""

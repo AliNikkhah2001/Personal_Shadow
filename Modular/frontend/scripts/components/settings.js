@@ -654,6 +654,21 @@ const SettingsView = React.memo(({ settings, setSettings, backend, networkFolder
                         <input type="range" min="50" max="255" value={settings.panel_opacity || 180} onChange={e => handleChange('panel_opacity', parseInt(e.target.value))} className="w-full accent-blue-500 mt-2" />
                     </div>
 
+                    {/* Timeline Configuration */}
+                    <div className="md:col-span-2 text-blue-400 font-bold uppercase tracking-widest text-xs border-b border-white/10 pb-1 mt-4">Timeline Configuration</div>
+                    <div className="flex flex-col gap-1">
+                        <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Timeline Start Hour (0-23)</label>
+                        <input type="number" min="0" max="23" value={settings.timeline_start_hour ?? 0} onChange={e => handleChange('timeline_start_hour', parseInt(e.target.value))} className="glass-input p-2.5 rounded text-sm" />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                        <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Timeline End Hour (1-24)</label>
+                        <input type="number" min="1" max="24" value={settings.timeline_end_hour ?? 24} onChange={e => handleChange('timeline_end_hour', parseInt(e.target.value))} className="glass-input p-2.5 rounded text-sm" />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                        <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Pixels Per Hour (Scaling)</label>
+                        <input type="number" min="60" max="300" value={settings.timeline_pixel_per_hour ?? 120} onChange={e => handleChange('timeline_pixel_per_hour', parseInt(e.target.value))} className="glass-input p-2.5 rounded text-sm" />
+                    </div>
+
                     {/* Horology Settings */}
                     <div className="md:col-span-2 text-blue-400 font-bold uppercase tracking-widest text-xs border-b border-white/10 pb-1 mt-4">Horology & Clock Styles</div>
                     <div className="flex flex-col gap-1">
