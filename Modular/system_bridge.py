@@ -815,6 +815,10 @@ class SystemBridge(QObject):
             "open_file_dialog": self._handle_open_file_dialog,
             "open_folder_dialog": self._handle_open_folder_dialog,
             "lib_list": self._handle_lib_list,
+            "lib_open": self._handle_lib_open,
+            "lib_page": self._handle_lib_page,
+            "lib_annot": self._handle_lib_annot,
+            "lib_open_native": self._handle_lib_open_native,
             "get_processes": self._handle_get_processes,
             "get_app_monitoring_status": self._handle_get_app_monitoring_status,
             "set_allowed_apps": self._handle_set_allowed_apps,
@@ -1335,6 +1339,124 @@ class SystemBridge(QObject):
                         }
                     )
         return json.dumps({"files": lib_files})
+
+    def _handle_lib_open(self, req):
+        filename = req.get("filename")
+        path = os.path.join(self.lib_path, filename)
+        if os.path.exists(path):
+            if self.active_pdf:
+                self.active_pdf.close()
+            self.active_pdf = pymupdf.open(path)
+            self.active_pdf_name = filename
+            return json.dumps({"status": "ok", "total_pages": len(self.active_pdf)})
+        return json.dumps({"error": f"File not found at {path}"})
+
+    def _handle_lib_page(self, req):
+        page_num = req.get("page", 0)
+        zoom = req.get("zoom", 1.5)
+        if self.active_pdf and 0 <= page_num < len(self.active_pdf):
+            page = self.active_pdf[page_num]
+            mat = pymupdf.Matrix(zoom, zoom)
+            pix = page.get_pixmap(matrix=mat)
+
+            img_data = pix.tobytes("png")
+            b64 = base64.b64encode(img_data).decode("utf-8")
+
+            annots = []
+            annot = page.first_annot
+            while annot:
+                info = annot.info
+                annots.append(
+                    {
+                        "subject": info.get("subject", "Unknown"),
+                        "title": info.get("title", ""),
+                        "content": info.get("content", ""),
+                    }
+                )
+                annot = annot.next
+
+            return json.dumps(
+                {
+                    "b64": b64,
+                    "width": pix.width,
+                    "height": pix.height,
+                    "annots": annots,
+                }
+            )
+        return json.dumps({"error": "Invalid page"})
+
+    def _handle_lib_annot(self, req):
+        page_num = req.get("page")
+        rect_coords = req.get("rect")
+        tool = req.get("tool")
+        text = req.get("text", "")
+
+        if self.active_pdf and 0 <= page_num < len(self.active_pdf):
+            page = self.active_pdf[page_num]
+            x0, y0, x1, y1 = rect_coords
+            pdf_rect = pymupdf.Rect(x0, y0, x1, y1)
+
+            dirty = False
+            if tool in ["Highlight", "Underline"]:
+                words = page.get_text("words")
+                quads = [
+                    pymupdf.Rect(w[:4])
+                    for w in words
+                    if pymupdf.Rect(w[:4]).intersects(pdf_rect)
+                ]
+                if quads:
+                    annot = (
+                        page.add_highlight_annot(quads)
+                        if tool == "Highlight"
+                        else page.add_underline_annot(quads)
+                    )
+                    annot.set_colors(
+                        stroke=(1, 1, 0) if tool == "Highlight" else (0, 0, 1)
+                    )
+                    annot.set_info(
+                        info={
+                            "title": "Web UI",
+                            "subject": tool,
+                            "content": "Marked via Web UI",
+                        }
+                    )
+                    annot.update()
+                    dirty = True
+            elif tool == "Note":
+                annot = page.add_text_annot(pdf_rect.tl, text)
+                annot.set_info(info={"title": "Web UI", "subject": "Note", "content": text})
+                annot.update()
+                dirty = True
+
+            if dirty:
+                with contextlib.suppress(Exception):
+                    self.active_pdf.save(
+                        self.active_pdf.name,
+                        incremental=True,
+                        encryption=pymupdf.PDF_ENCRYPT_KEEP,
+                    )
+            return json.dumps({"status": "ok"})
+        return json.dumps({"error": "Failed to add annotation"})
+
+    def _handle_lib_open_native(self, req):
+        try:
+            from native_pdf_editor import NativePDFEditor
+
+            filename = req.get("filename")
+            filepath = os.path.join(self.lib_path, filename)
+            if os.path.exists(filepath):
+                if not hasattr(self, "pdf_editors"):
+                    self.pdf_editors = []
+                editor = NativePDFEditor(filepath)
+                editor.show()
+                self.pdf_editors.append(editor)
+                return json.dumps({"status": "opened"})
+            return json.dumps({"error": f"File not found at {filepath}"})
+        except Exception as e:
+            import traceback
+
+            print(traceback.format_exc())
+            return json.dumps({"error": f"Native boot failure: {str(e)}"})
 
     def _handle_get_processes(self, req):
         return json.dumps(
