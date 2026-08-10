@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Background -->
+  <rect width="512" height="512" rx="100" fill="#0f172a" />
+  
+  <g transform="translate(100, 70)">
+    <!-- Shoulders / Coat -->
+    <path d="M 60 380 C 40 380 0 420 0 450 L 312 450 C 312 420 272 380 252 380 C 230 350 200 320 156 320 C 112 320 82 350 60 380 Z" fill="#1e293b" />
+    <path d="M 80 380 C 100 360 120 340 156 340 C 192 340 212 360 232 380 L 156 450 Z" fill="#334155" />
+    <!-- Collar -->
+    <path d="M 120 320 L 156 360 L 192 320 L 156 340 Z" fill="#0f172a" />
+    
+    <!-- Face / Profile -->
+    <path d="M 130 150 C 130 150 100 180 100 220 C 100 260 120 280 120 300 C 120 310 130 320 156 320 C 182 320 192 310 192 300 C 192 280 212 260 212 220 C 212 180 182 150 182 150 Z" fill="#cbd5e1" />
+    <!-- Jawline definition -->
+    <path d="M 120 250 C 140 260 172 260 192 250" stroke="#94a3b8" stroke-width="3" fill="none" />
+    <!-- Nose -->
+    <path d="M 190 200 L 210 220 L 195 230" stroke="#94a3b8" stroke-width="3" fill="none" />
+    
+    <!-- Deerstalker Hat -->
+    <path d="M 90 120 C 90 120 70 160 60 180 C 70 190 90 170 100 150 C 120 120 192 120 212 150 C 222 170 242 190 252 180 C 242 160 222 120 222 120 C 222 70 182 50 156 50 C 130 50 90 70 90 120 Z" fill="#3b82f6" />
+    <path d="M 100 150 C 120 120 192 120 212 150 L 156 120 Z" fill="#60a5fa" opacity="0.4" />
+    <!-- Hat Brim Lines -->
+    <path d="M 70 175 C 90 160 120 150 156 150 C 192 150 222 160 242 175" stroke="#1e3a8a" stroke-width="4" fill="none" />
+    <!-- Hat Top Button -->
+    <circle cx="156" cy="45" r="10" fill="#1e3a8a" />
+    
+    <!-- The Pipe -->
+    <path d="M 180 260 C 190 260 210 280 240 280 L 260 270 C 270 260 280 250 290 260 C 300 270 290 280 270 290 C 240 300 200 280 180 270 Z" fill="#94a3b8" />
+    <ellipse cx="280" cy="255" rx="15" ry="5" fill="#64748b" />
+    
+    <!-- Smoke -->
+    <circle cx="280" cy="220" r="15" fill="#e2e8f0" opacity="0.6" />
+    <circle cx="265" cy="180" r="20" fill="#e2e8f0" opacity="0.4" />
+    <circle cx="290" cy="130" r="30" fill="#e2e8f0" opacity="0.2" />
+    <circle cx="270" cy="70" r="40" fill="#e2e8f0" opacity="0.1" />
+  </g>
+</svg>

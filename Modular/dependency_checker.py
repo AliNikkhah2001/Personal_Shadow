@@ -1,6 +1,7 @@
-import sys
-import subprocess
 import importlib.util
+import subprocess
+import sys
+
 
 class Colors:
     HEADER = '\033[95m'
@@ -50,7 +51,7 @@ def run_diagnostics():
     print(f"{Colors.HEADER}{Colors.BOLD}===================================================={Colors.ENDC}\n")
 
     missing_packages = []
-    
+
     for import_name, pip_name in REQUIRED_PACKAGES.items():
         if is_installed(import_name): print(f"  {Colors.OKGREEN}✓ {import_name} is installed.{Colors.ENDC}")
         else:
@@ -65,7 +66,7 @@ def run_diagnostics():
         sys.exit(0)
 
     user_input = input("Would you like to automatically install missing packages now? (Y/n): ").strip().lower()
-    
+
     if user_input in ['', 'y', 'yes']:
         for package in missing_packages: install_package(package)
         print(f"{Colors.OKGREEN}{Colors.BOLD}Installation complete! Run python main.py{Colors.ENDC}")

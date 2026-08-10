@@ -1,0 +1,13 @@
+
+.env
+timelapses/
+*.avi
+*.mp4
+mindpalace_audit.log
+logs/
+*.db
+shadow_os_cache/
+__pycache__/
+*.pyc
+.venv/
+venv/

@@ -1,0 +1,26 @@
+# Mind Palace OS - Python Dependencies
+# Install with: pip install -r requirements.txt
+
+# Core GUI Framework
+PyQt6>=6.6.0
+PyQt6-WebEngine>=6.6.0
+
+# Computer Vision
+opencv-python>=4.8.0
+
+# Git Synchronization
+GitPython>=3.1.40
+py-machineid>=1.0.0
+
+# PDF Processing
+PyMuPDF>=1.23.0
+
+# System Monitoring
+psutil>=5.9.0
+
+# Text-to-Speech (Windows)
+pyttsx3>=2.90; sys_platform == "win32"
+
+# Data Processing (for future analytics)
+# numpy>=1.24.0
+# pandas>=2.0.0

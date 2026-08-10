@@ -1,18 +1,17 @@
-import os
-import sys
-import json
-import sqlite3
 import hashlib
-import subprocess
+import json
+import os
+import sqlite3
+import threading
 
 from PyQt6.QtGui import QColor
-from PyQt6.QtWidgets import QApplication
+
 
 def load_env_file():
     env_file = os.path.join(os.path.dirname(__file__), '.env')
     if os.path.exists(env_file):
         try:
-            with open(env_file, 'r', encoding='utf-8-sig') as f:
+            with open(env_file, encoding='utf-8-sig') as f:
                 for line in f:
                     line = line.strip()
                     if line and not line.startswith('#'):
@@ -33,12 +32,12 @@ class ConfigManager:
     def __init__(self, fn="config.json"):
         self.fn = fn
         self.defaults = {
-            "font_family": "Inter", "custom_font_path": "", "font_color": "#e2e8f0", "font_size": 16, 
-            "clock_style": "Analog Classic", "clock_case_shape": "Round", "clock_bezel": "Plain", 
+            "font_family": "Inter", "custom_font_path": "", "font_color": "#e2e8f0", "font_size": 16,
+            "clock_style": "Analog Classic", "clock_case_shape": "Round", "clock_bezel": "Plain",
             "clock_indices": "Baton", "clock_ticks": "Standard", "clock_hands": "Classic", "clock_complication": "None",
-            "dist_delay": 3, "vision_mode": "Strict (Face & Eyes)", "bg_image_path": "img/bg.jpg", "quotes_path": "", 
-            "panel_opacity": 180, "face_scale_factor": 1.2, "face_min_neighbors": 8, "face_min_size": 120, 
-            "vision_sample_interval": 30, "force_close_apps_mins": 5, "sound_app_dist": "Ping", 
+            "dist_delay": 3, "vision_mode": "Strict (Face & Eyes)", "bg_image_path": "img/bg.jpg", "quotes_path": "",
+            "panel_opacity": 180, "face_scale_factor": 1.2, "face_min_neighbors": 8, "face_min_size": 120,
+            "vision_sample_interval": 30, "force_close_apps_mins": 5, "sound_app_dist": "Ping",
             "sound_cam_dist": "Basso", "sound_cam_err": "Hero", "beep_freq": 3,
             "loop_1m": 2, "loop_5m": 5, "loop_15m": 10, "loop_30m": 20, "loop_60m": 30,
             "speech_dist": "You have been distracted. Please return to work.",
@@ -49,15 +48,25 @@ class ConfigManager:
             "dashboard_layout": {}
         }
         try:
-            with open(fn, 'r') as f: self.cfg = json.load(f)
+            with open(fn) as f: self.cfg = json.load(f)
         except: self.cfg = self.defaults.copy()
         for k, v in self.defaults.items():
             if self.cfg.get(k) is None: self.cfg[k] = v
-        
+
     def get(self, k, d=None): return self.cfg.get(k, d if d is not None else self.defaults.get(k))
     def set(self, k, v):
         self.cfg[k] = v
-        with open(self.fn, 'w') as f: json.dump(self.cfg, f)
+        try:
+            with open(self.fn, 'w') as f:
+                json.dump(self.cfg, f)
+        except PermissionError as e:
+            print(f"⚠️ Permission denied writing to {self.fn}: {e}")
+            # Write to a temp file as fallback
+            import tempfile
+            tmp_path = os.path.join(tempfile.gettempdir(), "config_fallback.json")
+            with open(tmp_path, 'w') as f:
+                json.dump(self.cfg, f)
+            print(f"⚠️ Config saved to fallback location: {tmp_path}")
 
 config = ConfigManager()
 
@@ -73,8 +82,10 @@ class DatabaseManager:
     def __init__(self, db_name="second_brain.db"):
         self.conn = sqlite3.connect(db_name, check_same_thread=False)
         self.c = self.conn.cursor()
+        self._lock = threading.Lock()
         self.setup()
-        
+        self.auto_migrate()
+
     def setup(self):
         self.c.executescript('''
             CREATE TABLE IF NOT EXISTS courses (id INTEGER PRIMARY KEY, name TEXT UNIQUE, target_hours REAL DEFAULT 0, uuid TEXT UNIQUE, modified_at TEXT);
@@ -91,12 +102,55 @@ class DatabaseManager:
             CREATE TABLE IF NOT EXISTS custom_foods (id INTEGER PRIMARY KEY, name TEXT UNIQUE, kcal REAL, protein REAL, fat REAL, carbs REAL, category TEXT, uuid TEXT UNIQUE, modified_at TEXT);
             CREATE TABLE IF NOT EXISTS custom_activities (id INTEGER PRIMARY KEY, name TEXT UNIQUE, met REAL, category TEXT, uuid TEXT UNIQUE, modified_at TEXT);
             CREATE TABLE IF NOT EXISTS health_plans (id INTEGER PRIMARY KEY, type TEXT, title TEXT, details TEXT, uuid TEXT UNIQUE, modified_at TEXT);
+            CREATE TABLE IF NOT EXISTS activity_logs (id INTEGER PRIMARY KEY, timestamp TEXT, module TEXT, description TEXT, uuid TEXT UNIQUE, modified_at TEXT);
+            CREATE TABLE IF NOT EXISTS deleted_uuids(table_name TEXT, uuid TEXT, deleted_at TEXT, PRIMARY KEY (table_name, uuid));
         ''')
-        self.conn.commit()
+        self.safe_commit()
+
+    def auto_migrate(self):
+        import uuid
+        from datetime import datetime
+
+        tables_to_sync = [
+            "courses", "pomodoro_sessions", "cascading_goals", "habits",
+            "habit_logs", "flashcards", "quizzes", "focus_queue", "notes",
+            "health_profile", "health_logs", "custom_foods", "custom_activities", "health_plans", "activity_logs"
+        ]
+
+        self.c.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        existing = [r[0] for r in self.c.fetchall()]
+
+        for table in tables_to_sync:
+            if table not in existing: continue
+
+            self.c.execute(f"PRAGMA table_info({table})")
+            cols = [col[1] for col in self.c.fetchall()]
+
+            if "uuid" not in cols:
+                try:
+                    self.c.execute(f"ALTER TABLE {table} ADD COLUMN uuid TEXT UNIQUE")
+                    self.c.execute(f"ALTER TABLE {table} ADD COLUMN modified_at TEXT")
+                    print(f"[DB Migration] Upgraded table: {table}")
+                except Exception as e:
+                    print(f"Migration error on {table}: {e}")
+
+            self.c.execute(f"SELECT id FROM {table} WHERE uuid IS NULL")
+            rows = self.c.fetchall()
+            if rows:
+                now = datetime.now().isoformat()
+                for r in rows:
+                    self.c.execute(f"UPDATE {table} SET uuid=?, modified_at=? WHERE id=?", (uuid.uuid4().hex, now, r[0]))
+                print(f"[DB Migration] Generated {len(rows)} UUIDs for {table}")
+
+        self.safe_commit()
+
+    def safe_commit(self):
+        with self._lock:
+            self.conn.commit()
 
 db = DatabaseManager()
 
-def get_color(c_name): 
+def get_color(c_name):
     if c_name == "Break": return QColor(100,100,100,200)
     if not c_name or c_name == "None": return QColor("#40c463")
     return QColor(f"#{hashlib.md5(c_name.encode()).hexdigest()[:6]}")
