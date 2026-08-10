@@ -35,19 +35,6 @@ class SyncManager(QObject):
         if not self.token: 
             self.token = config.get("sync_github_token", "")
         self.repo_url = config.get("sync_repo_url", "")
-    def _get_all_tables(self):
-        db.c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT IN ('sqlite_sequence')")
-        return [r[0] for r in db.c.fetchall()]
-    def get_master_id(self):
-        cluster_file = os.path.join(self.repo_path, "cluster_state.json")
-        if os.path.exists(cluster_file):
-            try:
-                with open(cluster_file, 'r') as f:
-                    return json.load(f).get("master_id")
-            except:
-                pass
-        return None
-
     def get_device_id(self):
         try: return machineid.id()
         except:
@@ -87,13 +74,15 @@ class SyncManager(QObject):
             try: os.remove(lock_file)
             except Exception as e: print(f"[SyncManager] Failed to remove lock: {e}")
 
-    def setup_repo(self):
+    def setup_repo(self, _retries=0):
         if not self.repo_url: return False, "No repository URL configured"
+        if _retries >= 3:
+            return False, f"Failed to setup repo after {_retries} attempts"
         os.environ['GIT_TERMINAL_PROMPT'] = '0'
         url = self.repo_url
         if not url.startswith('https://') and not url.startswith('http://'): url = 'https://' + url
         if self.token: url = url.replace("https://", f"https://{self.token}@")
-            
+
         import subprocess
         if os.path.exists(self.repo_path):
             try:
@@ -104,19 +93,19 @@ class SyncManager(QObject):
                 subprocess.run(['git', 'config', 'user.email', 'sync@mindpalace.os'], cwd=self.repo_path)
                 subprocess.run(['git', 'config', 'http.postBuffer', '524288000'], cwd=self.repo_path)
                 subprocess.run(['git', 'config', 'http.version', 'HTTP/1.1'], cwd=self.repo_path)
-                subprocess.run(['git', 'config', 'pull.rebase', 'false'], cwd=self.repo_path) 
-                
+                subprocess.run(['git', 'config', 'pull.rebase', 'false'], cwd=self.repo_path)
+
                 # REWRITE GITIGNORE TO FIX OLD AGGRESSIVE WILDCARDS
                 gitignore_path = os.path.join(self.repo_path, '.gitignore')
                 with open(gitignore_path, 'w') as f:
                     f.write('.idea/\n.vscode/\n*.swp\n.DS_Store\n')
                 self.repo.git.add('.gitignore')
-                
+
                 result = subprocess.run(['git', 'fetch', 'origin'], cwd=self.repo_path, capture_output=True, text=True)
                 return True, "Repository ready"
             except Exception as e:
                 shutil.rmtree(self.repo_path)
-                return self.setup_repo()
+                return self.setup_repo(_retries=_retries + 1)
         else:
             try:
                 os.makedirs(os.path.dirname(self.repo_path), exist_ok=True)
@@ -155,7 +144,7 @@ class SyncManager(QObject):
             for (row_id,) in rows:
                 new_uuid = uuid.uuid4().hex
                 db.c.execute(f"UPDATE {table} SET uuid=?, modified_at=? WHERE id=?", (new_uuid, now, row_id))
-        db.conn.commit()
+        db.safe_commit()
 
     def force_overwrite_remote(self):
         """DANGER ZONE: Purge remote device branches and force this device to be the Master"""
@@ -184,7 +173,7 @@ class SyncManager(QObject):
         self.ensure_uuids_and_timestamps()
         # Clear local deletion log (master should not have pending deletions)
         db.c.execute("DELETE FROM deleted_uuids")
-        db.conn.commit()
+        db.safe_commit()
         
         try:
             local_data = self.export_local_data()
@@ -333,7 +322,7 @@ class SyncManager(QObject):
                                     db.c.execute(f"UPDATE {table} SET {set_clause} WHERE id=?", values)
                                 except sqlite3.IntegrityError:
                                     pass
-        db.conn.commit()
+        db.safe_commit()
         
     def export_local_data(self):
         settings = config.cfg.copy()

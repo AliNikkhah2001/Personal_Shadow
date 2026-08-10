@@ -4,6 +4,7 @@ import json
 import sqlite3
 import hashlib
 import subprocess
+import threading
 
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import QApplication
@@ -83,6 +84,7 @@ class DatabaseManager:
     def __init__(self, db_name="second_brain.db"):
         self.conn = sqlite3.connect(db_name, check_same_thread=False)
         self.c = self.conn.cursor()
+        self._lock = threading.Lock()
         self.setup()
         self.auto_migrate()
         
@@ -105,7 +107,7 @@ class DatabaseManager:
             CREATE TABLE IF NOT EXISTS activity_logs (id INTEGER PRIMARY KEY, timestamp TEXT, module TEXT, description TEXT, uuid TEXT UNIQUE, modified_at TEXT);
             CREATE TABLE IF NOT EXISTS deleted_uuids(table_name TEXT, uuid TEXT, deleted_at TEXT, PRIMARY KEY (table_name, uuid));
         ''')
-        self.conn.commit()
+        self.safe_commit()
 
     def auto_migrate(self):
         import uuid
@@ -142,7 +144,11 @@ class DatabaseManager:
                     self.c.execute(f"UPDATE {table} SET uuid=?, modified_at=? WHERE id=?", (uuid.uuid4().hex, now, r[0]))
                 print(f"[DB Migration] Generated {len(rows)} UUIDs for {table}")
                 
-        self.conn.commit()
+        self.safe_commit()
+
+    def safe_commit(self):
+        with self._lock:
+            self.conn.commit()
 
 db = DatabaseManager()
 

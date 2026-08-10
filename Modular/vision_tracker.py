@@ -109,12 +109,12 @@ class VisionTracker(QObject):
         with StreamState.lock:
             StreamState.frame = None
 
-    def start_rec(self, path): 
+    def start_rec(self, path):
         self.is_rec = True
         self.v_path = path
         self.last_frame_time = time.time()
         os.makedirs("timelapses", exist_ok=True)
-        self.writer = cv2.VideoWriter(self.v_path, cv2.VideoWriter_fourcc(*'MJPG'), 15.0, (640, 480))
+        self.writer = cv2.VideoWriter(self.v_path, cv2.VideoWriter_fourcc(*'MJPG'), 1.0, (640, 480))
         
     def stop_rec(self): 
         self.is_rec = False

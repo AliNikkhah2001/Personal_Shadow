@@ -260,7 +260,7 @@ class AdvancedPDFWindow(QMainWindow):
     def bookmark(self):
         db.c.execute("INSERT INTO notes (title, content, course, folder, color, timestamp) VALUES (?, ?, ?, ?, ?, ?)",
                      (f"Bookmark: {os.path.basename(self.filepath)}", f"Bookmarked {os.path.basename(self.filepath)}", "General", "Bookmarks", "#facc15", datetime.now().isoformat()))
-        db.conn.commit()
+        db.safe_commit()
         QMessageBox.information(self, "Bookmark", "Bookmark successfully added to Notes database!")
 
 import cv2
@@ -342,7 +342,7 @@ class SystemBridge(QObject):
         
         try:
             db.c.execute("ALTER TABLE pomodoro_sessions ADD COLUMN note TEXT")
-            db.conn.commit()
+            db.safe_commit()
         except Exception:
             pass
             
@@ -352,16 +352,15 @@ class SystemBridge(QObject):
                 CREATE TABLE IF NOT EXISTS composite_foods (id INTEGER PRIMARY KEY, uuid TEXT UNIQUE, modified_at TEXT, name TEXT UNIQUE, image_path TEXT);
                 CREATE TABLE IF NOT EXISTS recipe_ingredients (id INTEGER PRIMARY KEY, uuid TEXT UNIQUE, modified_at TEXT, composite_food_id INTEGER, ingredient_id INTEGER, amount_grams REAL);
             ''')
-            db.conn.commit()
+            db.safe_commit()
         except Exception as e:
             print("Nutrition DB Migration Error:", e)
             
         self.quiet_mode = config.get("quiet_mode", False)
         
         self.sync_manager = SyncManager()
-        self.sync_manager.sync_progress.connect(lambda msg: self.sync_progress.emit(msg))
-        # No config.set() here
-        self.sync_manager.sync_completed.connect(lambda success, msg: config.set("git_status", "connected" if success else "error"))
+        self.sync_manager.sync_progress.connect(self.handle_sync_progress)
+        self.sync_manager.sync_completed.connect(self.handle_sync_completed)
 
         self.sync_timer = QTimer(); self.sync_timer.timeout.connect(self.auto_sync)
         if config.get("sync_enabled", False): self.sync_timer.start(config.get("sync_interval", 3600) * 1000)
@@ -394,7 +393,7 @@ class SystemBridge(QObject):
             now = datetime.now().isoformat()
             db.c.execute("INSERT INTO activity_logs (timestamp, module, description, uuid, modified_at) VALUES (?, ?, ?, ?, ?)",
                          (now, module, desc, uuid.uuid4().hex, now))
-            db.conn.commit()
+            db.safe_commit()
         except: pass
 
     def handle_sync_progress(self, msg):
@@ -696,7 +695,7 @@ class SystemBridge(QObject):
             except: return json.dumps({"today_sessions": [], "studied_hours": {}})
         elif action == "force_reset_all_data":
             try:
-                # 1. Clear all tables (including deleted_uuids)
+                # 1. Clear all tables
                 tables_to_clear = [
                     "courses", "pomodoro_sessions", "cascading_goals", "habits", 
                     "habit_logs", "flashcards", "quizzes", "focus_queue", "notes", 
@@ -709,7 +708,7 @@ class SystemBridge(QObject):
                         db.c.execute(f"DELETE FROM {table}")
                     except Exception as e:
                         print(f"Clear table {table} error: {e}")
-                db.conn.commit()
+                db.safe_commit()
 
                 # 2. Reset config to defaults, but preserve sync settings
                 repo_url = config.get("sync_repo_url", "")
@@ -722,7 +721,6 @@ class SystemBridge(QObject):
                 new_config["sync_github_token"] = token
                 new_config["sync_enabled"] = sync_enabled
                 new_config["sync_interval"] = sync_interval
-                # Reset sync status
                 new_config["git_status"] = "unknown"
                 new_config["git_last_sync"] = None
                 new_config["sync_msg"] = ""
@@ -732,19 +730,38 @@ class SystemBridge(QObject):
                 with open(config.fn, 'w') as f:
                     json.dump(config.cfg, f)
 
-                # 3. Delete the local Git sync repository
+                # 3. Delete the local Git sync repository with retries and Windows handling
                 import shutil
+                import time
                 repo_path = os.path.expanduser("~/.mindpalace_sync_repo")
                 if os.path.exists(repo_path):
-                    shutil.rmtree(repo_path)
+                    # Try to delete with retries
+                    for attempt in range(5):
+                        try:
+                            # On Windows, first try to remove read-only attributes
+                            if sys.platform == "win32":
+                                import subprocess
+                                subprocess.run(['attrib', '-r', '-s', '/s', '/d', repo_path], 
+                                            capture_output=True, shell=True)
+                            shutil.rmtree(repo_path)
+                            break
+                        except Exception as e:
+                            print(f"Delete attempt {attempt+1} failed: {e}")
+                            time.sleep(1)
+                            if attempt == 4:
+                                # If all retries fail, rename the folder (Windows workaround)
+                                renamed_path = repo_path + "_old_" + str(int(time.time()))
+                                try:
+                                    os.rename(repo_path, renamed_path)
+                                    print(f"Renamed repo to {renamed_path}")
+                                except:
+                                    print("Could not delete or rename repo – manual cleanup required")
 
                 self.log_activity("System", "Force reset all data performed")
-
                 return json.dumps({"status": "success", "message": "All local data wiped."})
             except Exception as e:
                 self.log_activity("System Error", f"Force reset failed: {str(e)}")
                 return json.dumps({"status": "error", "message": str(e)})
-
         elif action == "get_history_data":
             try:
                 db.c.execute("SELECT id, course, duration, actual_duration, timestamp, type, distractions, timelapse_path, distraction_data, note FROM pomodoro_sessions ORDER BY timestamp DESC")
@@ -771,7 +788,7 @@ class SystemBridge(QObject):
             note = req.get("note")
             if s_id:
                 db.c.execute("UPDATE pomodoro_sessions SET note = ? WHERE id = ?", (note, s_id))
-                db.conn.commit()
+                db.safe_commit()
             return json.dumps({"status": "ok"})
 
         elif action == "save_settings":
@@ -857,7 +874,7 @@ class SystemBridge(QObject):
                                             try: db.c.execute(f"INSERT INTO {table} ({cols}) VALUES ({placeholders})", list(row.values()))
                                             except: pass
                             except Exception as e: print(f"Merge error {filename}: {e}")
-                        db.conn.commit()
+                        db.safe_commit()
 
                     self.sync_progress.emit("Exporting local state...")
                     local_data = self.sync_manager.export_local_data()
@@ -946,7 +963,7 @@ class SystemBridge(QObject):
                         except Exception as e:
                             print(f"Clear table {table} error: {e}")
                     db.c.execute("DELETE FROM deleted_uuids")
-                    db.conn.commit()
+                    db.safe_commit()
 
                     self.sync_progress.emit("Injecting node data...")
                     with open(target_file, 'r', encoding='utf-8') as f:
@@ -968,7 +985,7 @@ class SystemBridge(QObject):
                                 db.c.execute(f"INSERT INTO {table} ({cols}) VALUES ({placeholders})", list(row.values()))
                             except Exception as e:
                                 print(f"Clone insert error {table}: {e}")
-                    db.conn.commit()
+                    db.safe_commit()
                     
                     self.handle_sync_completed(True, f"Successfully cloned from {os.path.basename(target_file)}. Restart App.")
                 except Exception as e:
@@ -1005,7 +1022,7 @@ class SystemBridge(QObject):
                     
                     # Clear local deletion log
                     db.c.execute("DELETE FROM deleted_uuids")
-                    db.conn.commit()
+                    db.safe_commit()
                     
                     self.sync_progress.emit("Exporting Master local data...")
                     self.sync_manager.ensure_uuids_and_timestamps()
@@ -1128,13 +1145,31 @@ class SystemBridge(QObject):
                     db.c.execute(f"DELETE FROM {table}")
                 except Exception:
                     pass
-            db.conn.commit()
+            db.safe_commit()
             return json.dumps({"status": "cleared"})
 
         elif action == "open_file_dialog":
             parent = QApplication.activeWindow()
             file_path, _ = QFileDialog.getOpenFileName(parent, "Select a file", "", "All Files (*.*);;JSON (*.json);;Images (*.png *.jpg)")
             return json.dumps({"path": file_path if file_path else ""})
+
+        elif action == "open_folder_dialog":
+            parent = QApplication.activeWindow()
+            folder_path = QFileDialog.getExistingDirectory(parent, "Select a folder", "")
+            return json.dumps({"path": folder_path if folder_path else ""})
+
+        elif action == "lib_list":
+            lib_files = []
+            if os.path.exists(self.lib_path):
+                for f in os.listdir(self.lib_path):
+                    if f.lower().endswith('.pdf'):
+                        full_path = os.path.join(self.lib_path, f)
+                        lib_files.append({
+                            "name": f,
+                            "path": full_path,
+                            "size": os.path.getsize(full_path)
+                        })
+            return json.dumps({"files": lib_files})
 
         elif action == "get_processes":
             return json.dumps({"processes": [{'name': p['name'], 'pid': p['pid'], 'cpu': p['cpu'], 'memory': p['memory']} for p in self.get_running_processes()[:50]]})
@@ -1204,7 +1239,7 @@ class SystemBridge(QObject):
             
             db.c.execute("INSERT INTO health_logs (uuid, modified_at, log_type, date, data_json) VALUES (?, ?, ?, ?, ?)", 
                          (uuid.uuid4().hex, datetime.now().isoformat(), 'body_scan', today_str, json.dumps(data)))
-            db.conn.commit()
+            db.safe_commit()
             
             h_prof = db.c.execute("SELECT data_json FROM health_profile ORDER BY id DESC LIMIT 1").fetchone()
             h_logs = [{"type": r[0], "date": r[1], "data": json.loads(r[2])} for r in db.c.execute("SELECT log_type, date, data_json FROM health_logs").fetchall()]
@@ -1220,7 +1255,7 @@ class SystemBridge(QObject):
                     self.total_time = int(q[1]) * 60
                     self.current_course = q[2] or "General"
                     db.c.execute("UPDATE focus_queue SET status='active' WHERE id=?", (self.active_queue_id,))
-                    db.conn.commit()
+                    db.safe_commit()
             else:
                 self.current_course = req.get("course", "General")
                 self.total_time = int(req.get("duration", 25)) * 60
@@ -1258,7 +1293,7 @@ class SystemBridge(QObject):
             if self.active_queue_id:
                 db.c.execute("UPDATE focus_queue SET status='pending' WHERE id=?", (self.active_queue_id,))
                 self.active_queue_id = None
-                db.conn.commit()
+                db.safe_commit()
             
             self.push_state()
             return json.dumps({"status": "stopped"})
@@ -1313,7 +1348,7 @@ class SystemBridge(QObject):
                 self.active_queue_id = None
                 self.is_running = False
                 self.timer.stop()
-            db.conn.commit()
+            db.safe_commit()
             
             db.c.execute("SELECT id, title, duration, type, status, course FROM focus_queue ORDER BY id")
             queue_data = [{"id": r[0], "title": r[1], "duration": r[2], "type": r[3], "status": r[4], "course": r[5]} for r in db.c.fetchall()]
@@ -1340,7 +1375,7 @@ class SystemBridge(QObject):
                 try:
                     db.c.execute("INSERT INTO ingredients (uuid, modified_at, name, kcal, protein, fat, carbs, image_path, is_iranian) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                         (uuid.uuid4().hex, datetime.now().isoformat(), req.get("name"), float(req.get("kcal") or 0), float(req.get("protein") or 0), float(req.get("fat") or 0), float(req.get("carbs") or 0), req.get("image_path", ""), req.get("is_iranian", False)))
-                    db.conn.commit()
+                    db.safe_commit()
                 except sqlite3.IntegrityError:
                     pass
                 return self.request(json.dumps({"action": "manage_nutrition", "sub": "get_all"}))
@@ -1348,7 +1383,7 @@ class SystemBridge(QObject):
             elif sub == "delete_ingredient":
                 db.c.execute("DELETE FROM ingredients WHERE id=?", (req.get("id"),))
                 db.c.execute("DELETE FROM recipe_ingredients WHERE ingredient_id=?", (req.get("id"),))
-                db.conn.commit()
+                db.safe_commit()
                 return self.request(json.dumps({"action": "manage_nutrition", "sub": "get_all"}))
                 
             elif sub == "add_composite":
@@ -1359,14 +1394,14 @@ class SystemBridge(QObject):
                     for part in req.get("parts", []):
                         db.c.execute("INSERT INTO recipe_ingredients (uuid, modified_at, composite_food_id, ingredient_id, amount_grams) VALUES (?, ?, ?, ?, ?)", 
                             (uuid.uuid4().hex, datetime.now().isoformat(), c_id, part["ingredient_id"], part["amount_grams"]))
-                    db.conn.commit()
+                    db.safe_commit()
                 except sqlite3.IntegrityError: pass
                 return self.request(json.dumps({"action": "manage_nutrition", "sub": "get_all"}))
 
             elif sub == "delete_composite":
                 db.c.execute("DELETE FROM composite_foods WHERE id=?", (req.get("id"),))
                 db.c.execute("DELETE FROM recipe_ingredients WHERE composite_food_id=?", (req.get("id"),))
-                db.conn.commit()
+                db.safe_commit()
                 return self.request(json.dumps({"action": "manage_nutrition", "sub": "get_all"}))
 
         elif action == "manage_health":
@@ -1400,7 +1435,7 @@ class SystemBridge(QObject):
                     db.c.execute("DELETE FROM health_plans WHERE id=?", (req.get("id"),))
                     db.c.execute("INSERT INTO deleted_uuids (table_name, uuid, deleted_at) VALUES (?, ?, ?)",
                                 ("health_plans", plan_uuid[0], datetime.now().isoformat()))
-            db.conn.commit()
+            db.safe_commit()
             return json.dumps({
                 "health_logs": [{"id": r[0], "type": r[1], "date": r[2], "data": json.loads(r[3])} 
                                 for r in db.c.execute("SELECT id, log_type, date, data_json FROM health_logs ORDER BY modified_at DESC").fetchall()], 
@@ -1435,7 +1470,7 @@ class SystemBridge(QObject):
                 else: 
                     db.c.execute("INSERT INTO habit_logs (uuid, modified_at, habit_id, date, status) VALUES (?, ?, ?, ?, ?)", 
                                 (uuid.uuid4().hex, datetime.now().isoformat(), hid, dt, st))
-            db.conn.commit()
+            db.safe_commit()
             return json.dumps({
                 "habits": [{"id": r[0], "name": r[1], "type": r[2]} for r in db.c.execute("SELECT id, name, type FROM habits").fetchall()], 
                 "habit_logs": [{"habit_id": r[0], "date": r[1], "status": r[2]} for r in db.c.execute("SELECT habit_id, date, status FROM habit_logs").fetchall()]
@@ -1456,7 +1491,7 @@ class SystemBridge(QObject):
                     db.c.execute("DELETE FROM notes WHERE id=?", (req.get("id"),))
                     db.c.execute("INSERT INTO deleted_uuids (table_name, uuid, deleted_at) VALUES (?, ?, ?)",
                                 ("notes", note_uuid[0], datetime.now().isoformat()))
-            db.conn.commit()
+            db.safe_commit()
             return json.dumps({
                 "notes": [{"id": r[0], "title": r[1], "content": r[2], "course": r[3], "folder": r[4], "color": r[5]} 
                         for r in db.c.execute("SELECT id, title, content, course, folder, color FROM notes ORDER BY id DESC").fetchall()]
@@ -1473,7 +1508,7 @@ class SystemBridge(QObject):
                     db.c.execute("DELETE FROM flashcards WHERE id=?", (req.get("id"),))
                     db.c.execute("INSERT INTO deleted_uuids (table_name, uuid, deleted_at) VALUES (?, ?, ?)",
                                 ("flashcards", card_uuid[0], datetime.now().isoformat()))
-            db.conn.commit()
+            db.safe_commit()
             return json.dumps({
                 "flashcards": [{"id": r[0], "front": r[1], "back": r[2], "deck": r[3], "course": r[4], "folder": r[5], "color": r[6]} 
                             for r in db.c.execute("SELECT id, front, back, deck, course, folder, color FROM flashcards").fetchall()]
@@ -1492,7 +1527,7 @@ class SystemBridge(QObject):
                     db.c.execute("DELETE FROM quizzes WHERE id=?", (req.get("id"),))
                     db.c.execute("INSERT INTO deleted_uuids (table_name, uuid, deleted_at) VALUES (?, ?, ?)",
                                 ("quizzes", quiz_uuid[0], datetime.now().isoformat()))
-            db.conn.commit()
+            db.safe_commit()
             return json.dumps({
                 "quizzes": [{"id": r[0], "title": r[1], "json": r[2], "course": r[3], "folder": r[4], "color": r[5]} 
                             for r in db.c.execute("SELECT id, title, questions_json, course, folder, color FROM quizzes").fetchall()]
@@ -1510,7 +1545,7 @@ class SystemBridge(QObject):
                     db.c.execute("DELETE FROM cascading_goals WHERE id=?", (req.get("id"),))
                     db.c.execute("INSERT INTO deleted_uuids (table_name, uuid, deleted_at) VALUES (?, ?, ?)",
                                 ("cascading_goals", goal_uuid[0], datetime.now().isoformat()))
-            db.conn.commit()
+            db.safe_commit()
             return json.dumps({"goals": self.get_goals_tree(), "flat_goals": self.get_flat_goals()})
 
 
@@ -1554,7 +1589,7 @@ class SystemBridge(QObject):
                         row.pop("id", None)
                         cols = ", ".join(row.keys()); placeholders = ", ".join(["?"] * len(row))
                         db.c.execute(f"INSERT INTO {table} ({cols}) VALUES ({placeholders})", list(row.values()))
-            db.conn.commit()
+            db.safe_commit()
             return self.request(json.dumps({"action": "init"}))
 
         return json.dumps({"error": "Unknown action"})
@@ -1716,7 +1751,7 @@ class SystemBridge(QObject):
             
             if self.active_queue_id:
                 db.c.execute("UPDATE focus_queue SET status='completed' WHERE id=?", (self.active_queue_id,))
-                db.conn.commit()
+                db.safe_commit()
                 
                 db.c.execute("SELECT id, duration, course, type FROM focus_queue WHERE status='pending' ORDER BY id ASC LIMIT 1")
                 next_item = db.c.fetchone()
@@ -1734,7 +1769,7 @@ class SystemBridge(QObject):
                     self.distraction_type_current = "Manual"
                     
                     db.c.execute("UPDATE focus_queue SET status='active' WHERE id=?", (self.active_queue_id,))
-                    db.conn.commit()
+                    db.safe_commit()
                     
                     if not config.get("quiet_mode", False):
                         course_safe = self.current_course.replace(' ', '_').replace('/', '')
@@ -1752,6 +1787,6 @@ class SystemBridge(QObject):
                 self.ovl.hide()
                 self.vision.stop()
                 
-            db.conn.commit()
+            db.safe_commit()
         
         self.push_state(dist_mode)
