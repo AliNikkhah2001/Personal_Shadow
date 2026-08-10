@@ -16,6 +16,7 @@ class NutritionHandler(ActionHandler):
 
     actions: ClassVar[dict[str, str]] = {
         "manage_nutrition": "manage_nutrition",
+        "estimate_calories_opencv": "estimate_calories_opencv",
     }
 
     def manage_nutrition(self, req: dict[str, Any]) -> str:
@@ -31,6 +32,32 @@ class NutritionHandler(ActionHandler):
         if sub == "delete_composite":
             return self._delete_composite(req)
         return json.dumps({"error": "Unknown nutrition sub-action"})
+
+    def estimate_calories_opencv(self, req: dict[str, Any]) -> str:
+        """Estimate calories from food image using OpenCV.
+        
+        Future scope: This is a placeholder for computer vision based
+        calorie estimation. Requires trained models for:
+        - Food detection/classification
+        - Instance segmentation
+        - Volume estimation
+        """
+        image_path = req.get("image_path")
+        if not image_path:
+            return json.dumps({"error": "No image path provided"})
+        
+        # This is a framework - actual implementation would use trained models
+        return json.dumps({
+            "status": "framework_ready",
+            "message": "OpenCV calorie estimation framework is ready. Requires trained models for production use.",
+            "components_needed": [
+                "Food detection model (YOLO/EfficientDet)",
+                "Instance segmentation model (Mask R-CNN)",
+                "Reference object detection for scale",
+                "Nutrition database integration"
+            ],
+            "estimated_detections": []
+        })
 
     def _get_all(self) -> str:
         db.c.execute(
