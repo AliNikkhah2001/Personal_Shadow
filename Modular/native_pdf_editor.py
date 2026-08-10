@@ -1,13 +1,26 @@
-import sys
 import os
+import sys
+
 import fitz  # PyMuPDF
-from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
-                             QPushButton, QLabel, QScrollArea, QToolBar, QStatusBar,
-                             QInputDialog, QLineEdit, QRubberBand, QApplication,
-                             QSizePolicy, QFrame, QButtonGroup)
-from PyQt6.QtGui import (QImage, QPixmap, QColor, QPainter, QPen, QBrush, 
-                         QKeySequence, QShortcut, QCursor)
-from PyQt6.QtCore import Qt, QRect, QSize, QPoint, QTimer
+from PyQt6.QtCore import QRect, QSize, Qt
+from PyQt6.QtGui import QImage, QKeySequence, QPixmap, QShortcut
+from PyQt6.QtWidgets import (
+    QApplication,
+    QButtonGroup,
+    QInputDialog,
+    QLabel,
+    QLineEdit,
+    QMainWindow,
+    QPushButton,
+    QRubberBand,
+    QScrollArea,
+    QSizePolicy,
+    QStatusBar,
+    QToolBar,
+    QVBoxLayout,
+    QWidget,
+)
+
 
 class PageWidget(QLabel):
     """
@@ -19,17 +32,17 @@ class PageWidget(QLabel):
         self.doc = doc
         self.page_num = page_num
         self.editor = editor
-        
+
         self.scale = self.editor.zoom_level
         self._pixmap = None
-        
+
         # Pre-allocate exact geometric layout space without rendering the image
         self.pdf_rect = self.doc[self.page_num].rect
         self.setFixedSize(int(self.pdf_rect.width * self.scale), int(self.pdf_rect.height * self.scale))
-        
+
         self.start_pt = None
         self.rubber_band = QRubberBand(QRubberBand.Shape.Rectangle, self)
-        
+
         # Sleek shadow and border for the page
         self.setStyleSheet("""
             background-color: white; 
@@ -76,11 +89,11 @@ class PageWidget(QLabel):
     def apply_annotation(self, start, end):
         rect = QRect(start, end).normalized()
         if rect.width() < 5 or rect.height() < 5: return
-        
+
         # Convert Screen CSS Pixels -> Absolute PDF Points
-        rect_pdf = fitz.Rect(rect.left() / self.scale, rect.top() / self.scale, 
+        rect_pdf = fitz.Rect(rect.left() / self.scale, rect.top() / self.scale,
                              rect.right() / self.scale, rect.bottom() / self.scale)
-        
+
         page = self.doc[self.page_num]
         tool = self.editor.current_tool
         color = self.editor.current_color
@@ -94,7 +107,7 @@ class PageWidget(QLabel):
                 w_rect = fitz.Rect(w[:4])
                 if w_rect.intersects(rect_pdf):
                     highlight_rects.append(w_rect)
-            
+
             if highlight_rects:
                 if tool == "Highlight":
                     annot = page.add_highlight_annot(highlight_rects)
@@ -102,11 +115,11 @@ class PageWidget(QLabel):
                     annot = page.add_underline_annot(highlight_rects)
                 elif tool == "StrikeOut":
                     annot = page.add_strikeout_annot(highlight_rects)
-                    
+
                 annot.set_colors(stroke=color)
                 annot.update()
                 dirty = True
-                
+
         elif tool == "Note":
             text, ok = QInputDialog.getMultiLineText(self, "Add Annotation", "Enter your note:")
             if ok and text:
@@ -114,7 +127,7 @@ class PageWidget(QLabel):
                 annot.set_colors(stroke=color)
                 annot.update()
                 dirty = True
-                
+
         elif tool == "Screenshot":
             pix = page.get_pixmap(clip=rect_pdf, matrix=fitz.Matrix(3.0, 3.0))
             img = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format.Format_RGB888)
@@ -128,8 +141,8 @@ class PageWidget(QLabel):
                 self.doc.save(self.doc.name, incremental=True, encryption=fitz.PDF_ENCRYPT_KEEP)
                 self.editor.statusBar().showMessage(f"Added {tool} and Auto-Saved.", 2000)
             except Exception as e:
-                self.editor.statusBar().showMessage(f"Error saving: {str(e)}", 4000)
-                
+                self.editor.statusBar().showMessage(f"Error saving: {e!s}", 4000)
+
             self._pixmap = None # Force a re-render of this page
             self.update()
 
@@ -141,7 +154,7 @@ class NativePDFEditor(QMainWindow):
         self.doc = fitz.open(filepath)
         self.zoom_level = 2.0
         self.current_tool = "Highlight"
-        
+
         # Predefined PyMuPDF RGB tuples (0.0 to 1.0)
         self.color_palette = {
             "Yellow": (1.0, 0.9, 0.2),
@@ -151,13 +164,13 @@ class NativePDFEditor(QMainWindow):
             "Purple": (0.6, 0.2, 0.8)
         }
         self.current_color = self.color_palette["Yellow"]
-        
+
         self.setWindowTitle(f"Mind Palace Advanced Reader - {os.path.basename(filepath)}")
         self.resize(1300, 900)
-        
+
         self.setup_ui()
         self.setup_shortcuts()
-        
+
     def setup_ui(self):
         # 1. Dark Mode Styling for Master Window
         self.setStyleSheet("""
@@ -179,7 +192,7 @@ class NativePDFEditor(QMainWindow):
         self.top_bar = QToolBar("Top Controls")
         self.top_bar.setMovable(False)
         self.addToolBar(Qt.ToolBarArea.TopToolBarArea, self.top_bar)
-        
+
         # Tools Group
         self.tool_grp = QButtonGroup(self)
         for t in ["Pan", "Highlight", "Underline", "StrikeOut", "Note", "Screenshot"]:
@@ -190,11 +203,11 @@ class NativePDFEditor(QMainWindow):
             self.top_bar.addWidget(btn)
             self.tool_grp.addButton(btn)
             if t == "Highlight": btn.setChecked(True)
-            
+
         # Spacer
         spacer1 = QWidget(); spacer1.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.top_bar.addWidget(spacer1)
-        
+
         # Color Group
         self.top_bar.addWidget(QLabel(" Color: ", styleSheet="color: #71717a; font-weight: bold; font-size: 11px;"))
         self.color_grp = QButtonGroup(self)
@@ -216,47 +229,47 @@ class NativePDFEditor(QMainWindow):
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         self.scroll_area.verticalScrollBar().valueChanged.connect(self.on_scroll)
-        
+
         self.canvas_container = QWidget()
         self.canvas_container.setStyleSheet("background-color: #050505;")
         self.layout = QVBoxLayout(self.canvas_container)
         self.layout.setSpacing(0)
         self.layout.setContentsMargins(40, 40, 40, 40)
         self.layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        
+
         # Inject Lazy Pages
         self.page_widgets = []
         for i in range(len(self.doc)):
             pw = PageWidget(self.doc, i, self)
             self.layout.addWidget(pw)
             self.page_widgets.append(pw)
-            
+
         self.scroll_area.setWidget(self.canvas_container)
         self.setCentralWidget(self.scroll_area)
-        
+
         # 4. Bottom Control Toolbar (Navigation & Zoom)
         self.bottom_bar = QToolBar("Bottom Controls")
         self.bottom_bar.setMovable(False)
         self.addToolBar(Qt.ToolBarArea.BottomToolBarArea, self.bottom_bar)
-        
+
         self.lbl_page = QLabel(f" Page: 1 / {len(self.doc)} ")
         self.lbl_page.setStyleSheet("color: white; font-weight: bold; margin-right: 10px;")
         self.bottom_bar.addWidget(self.lbl_page)
-        
+
         self.page_input = QLineEdit()
         self.page_input.setPlaceholderText("Go to page...")
         self.page_input.setFixedWidth(100)
         self.page_input.returnPressed.connect(self.jump_to_page)
         self.bottom_bar.addWidget(self.page_input)
-        
+
         spacer2 = QWidget(); spacer2.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.bottom_bar.addWidget(spacer2)
-        
+
         btn_z_out = QPushButton("Zoom -")
         btn_z_out.clicked.connect(lambda: self.change_zoom(-0.3))
         btn_z_in = QPushButton("Zoom +")
         btn_z_in.clicked.connect(lambda: self.change_zoom(0.3))
-        
+
         self.bottom_bar.addWidget(btn_z_out)
         self.bottom_bar.addWidget(btn_z_in)
 
@@ -304,7 +317,7 @@ class NativePDFEditor(QMainWindow):
 
     def setup_shortcuts(self):
         QShortcut(QKeySequence("Esc"), self, self.close)
-        
+
         scroll = self.scroll_area.verticalScrollBar()
         QShortcut(QKeySequence("Down"), self, lambda: scroll.setValue(scroll.value() + 80))
         QShortcut(QKeySequence("Up"), self, lambda: scroll.setValue(scroll.value() - 80))

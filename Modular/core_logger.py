@@ -1,7 +1,7 @@
-import logging
 import functools
-import time
+import logging
 import os
+import time
 from datetime import datetime
 
 # 1. Configure the Global Logger
@@ -34,12 +34,12 @@ def audit_log(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         # Format arguments nicely, ignoring 'self' for cleaner logs
-        args_repr = [repr(a) for a in args if not str(a).startswith('<')] 
+        args_repr = [repr(a) for a in args if not str(a).startswith('<')]
         kwargs_repr = [f"{k}={v!r}" for k, v in kwargs.items()]
         signature = ", ".join(args_repr + kwargs_repr)
-        
+
         logger.debug(f"Executing: {func.__name__}({signature})")
-        
+
         start_time = time.time()
         try:
             result = func(*args, **kwargs)
@@ -48,7 +48,7 @@ def audit_log(func):
             return result
         except Exception as e:
             run_time = time.time() - start_time
-            logger.error(f"CRASH in {func.__name__}: {str(e)} (Failed after {run_time:.4f}s)", exc_info=True)
+            logger.error(f"CRASH in {func.__name__}: {e!s} (Failed after {run_time:.4f}s)", exc_info=True)
             raise # Re-raise the exception after logging it
-            
+
     return wrapper

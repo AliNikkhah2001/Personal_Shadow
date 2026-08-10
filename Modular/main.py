@@ -1,32 +1,19 @@
-import sys
-import os
-import requests
-import re
-import uuid
-import sqlite3
-import json
-import hashlib
-import cv2
-import markdown
-import urllib3
-import time
-import subprocess
-import random
 import logging
-from datetime import datetime, timedelta
-import numpy as np
+import os
+import re
+import sys
+
 import matplotlib
+import requests
+import urllib3
+
 matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.backends.backend_agg import FigureCanvasAgg
-from PyQt6.QtWidgets import QApplication, QMainWindow, QLabel, QVBoxLayout, QWidget, QProgressBar
-from PyQt6.QtCore import Qt, QUrl, QThread, pyqtSignal
+from PyQt6.QtCore import Qt, QThread, QUrl, pyqtSignal
 from PyQt6.QtGui import QFont, QIcon
-from PyQt6.QtMultimedia import QSoundEffect
-from PyQt6.QtWebEngineWidgets import QWebEngineView
-from PyQt6.QtWebEngineCore import QWebEngineSettings
 from PyQt6.QtWebChannel import QWebChannel
+from PyQt6.QtWebEngineCore import QWebEngineSettings
+from PyQt6.QtWebEngineWidgets import QWebEngineView
+from PyQt6.QtWidgets import QApplication, QLabel, QMainWindow, QProgressBar, QVBoxLayout, QWidget
 
 # Force Python to look in the current directory for custom modules
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -65,7 +52,7 @@ class DownloaderThread(QThread):
 
     def run(self):
         dirs = ['js', 'css', 'webfonts', 'img']
-        for d in dirs: 
+        for d in dirs:
             os.makedirs(os.path.join(CACHE_DIR, d), exist_ok=True)
 
         assets = [
@@ -87,9 +74,9 @@ class DownloaderThread(QThread):
                 self.status.emit(f"Caching {path.split('/')[-1]}...")
                 try:
                     r = requests.get(url, timeout=15)
-                    with open(target, 'wb') as f: 
+                    with open(target, 'wb') as f:
                         f.write(r.content)
-                except: 
+                except:
                     pass
             self.progress.emit(int(((i + 1) / len(assets)) * 70))
 
@@ -108,14 +95,14 @@ class DownloaderThread(QThread):
                     if not os.path.exists(wpath):
                         self.status.emit(f"Downloading font {fname}...")
                         wr = requests.get(url, headers=headers, timeout=15)
-                        with open(wpath, 'wb') as f: 
+                        with open(wpath, 'wb') as f:
                             f.write(wr.content)
                     css_content = css_content.replace(url, f"../webfonts/{fname}")
-                with open(css_path, 'w') as f: 
+                with open(css_path, 'w') as f:
                     f.write(css_content)
-            except: 
+            except:
                 pass
-            
+
         self.progress.emit(100)
         self.status.emit("Booting Mind Palace OS...")
         self.finished.emit()
@@ -127,7 +114,7 @@ class SplashScreen(QWidget):
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
         self.setFixedSize(450, 160)
         self.setStyleSheet("background-color: #0a0a0f; color: #e2e8f0; border: 1px solid #1e1e2b; border-radius: 12px;")
-        
+
         lay = QVBoxLayout(self)
         self.lbl = QLabel("Initializing Mind Palace OS Offline Cache...", alignment=Qt.AlignmentFlag.AlignCenter)
         self.lbl.setFont(QFont("Arial", 12, QFont.Weight.Bold))
@@ -135,7 +122,7 @@ class SplashScreen(QWidget):
         self.pbar.setRange(0, 100)
         self.pbar.setValue(0)
         self.pbar.setStyleSheet("QProgressBar { border: 1px solid #1e1e2b; border-radius: 6px; text-align: center; background-color: #14141d; color: white; font-weight: bold; } QProgressBar::chunk { background-color: #3b82f6; border-radius: 5px; }")
-        
+
         lay.addStretch()
         lay.addWidget(self.lbl)
         lay.addSpacing(15)
@@ -160,37 +147,37 @@ class MindPalaceWebOS(QMainWindow):
         super().__init__()
         self.setWindowTitle("Shadow OS - Master Architecture")
         self.resize(1400, 900)
-        
+
         # Load the sleek SVG logo
         icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "logo.svg")
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
-        
+
         self.browser = QWebEngineView()
         self.browser.settings().setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True)
         self.browser.settings().setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessFileUrls, True)
-        
+
         self.channel = QWebChannel()
         self.bridge = SystemBridge()
         self.channel.registerObject("backend", self.bridge)
         self.browser.page().setWebChannel(self.channel)
-        
-        with open("index.html", "r", encoding="utf-8") as f: 
+
+        with open("index.html", encoding="utf-8") as f:
             html_content = f.read()
-            
+
         base_url = QUrl.fromLocalFile(os.path.abspath(CACHE_DIR) + os.sep)
         self.browser.setHtml(html_content, base_url)
         self.setCentralWidget(self.browser)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    
+
     icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "logo.svg")
     if os.path.exists(icon_path):
         app.setWindowIcon(QIcon(icon_path))
-        
+
     app.setStyle("Fusion")
-    
+
     # Check if the cache is full, if so boot directly, otherwise splash
     if os.path.exists(os.path.join(CACHE_DIR, "js", "react.js")):
         w = MindPalaceWebOS()
@@ -199,5 +186,5 @@ if __name__ == "__main__":
         splash = SplashScreen()
         splash.show()
         splash.start_download()
-        
+
     sys.exit(app.exec())

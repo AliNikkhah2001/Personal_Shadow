@@ -1,14 +1,16 @@
-import cv2
-import sys
 import os
-import time
+import sys
 import threading
-import base64
-import numpy as np
+import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
-from PyQt6.QtCore import QObject, pyqtSignal, QTimer
+
+import cv2
+import numpy as np
+from PyQt6.QtCore import QObject, QTimer, pyqtSignal
+
 from core_sys import config
+
 
 # Global thread-safe frame container for the HTTP stream
 class StreamState:
@@ -31,7 +33,7 @@ class StreamingHandler(BaseHTTPRequestHandler):
                             time.sleep(0.1)
                             continue
                         _, jpeg = cv2.imencode('.jpg', StreamState.frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
-                    
+
                     self.wfile.write(b'--FRAME\r\n')
                     self.send_header('Content-Type', 'image/jpeg')
                     self.send_header('Content-Length', len(jpeg))
@@ -63,7 +65,7 @@ class VisionTracker(QObject):
 
         self.tmr = QTimer()
         self.tmr.timeout.connect(self.process)
-        
+
         self.is_rec = False
         self.writer = None
         self.v_path = ""
@@ -80,7 +82,7 @@ class VisionTracker(QObject):
             print("Port 5050 already in use, stream server might already be running.")
 
     def upd_settings(self):
-        if self.tmr.isActive(): 
+        if self.tmr.isActive():
             self.tmr.setInterval(config.get("vision_sample_interval", 30))
 
     def start(self):
@@ -115,10 +117,10 @@ class VisionTracker(QObject):
         self.last_frame_time = time.time()
         os.makedirs("timelapses", exist_ok=True)
         self.writer = cv2.VideoWriter(self.v_path, cv2.VideoWriter_fourcc(*'MJPG'), 1.0, (640, 480))
-        
-    def stop_rec(self): 
+
+    def stop_rec(self):
         self.is_rec = False
-        if self.writer: 
+        if self.writer:
             self.writer.release()
             self.writer = None
 
@@ -144,7 +146,7 @@ class VisionTracker(QObject):
 
         self.has_valid_feed = True
         gray = cv2.equalizeHist(cv2.cvtColor(frm, cv2.COLOR_BGR2GRAY))
-        
+
         # RECORDING FIX: 1 frame per second to capture short test sessions perfectly
         if self.is_rec and self.writer:
             curr = time.time()
@@ -161,34 +163,34 @@ class VisionTracker(QObject):
         if "Presence" in mode:
             fg = self.bg_sub.apply(cv2.GaussianBlur(gray, (21, 21), 0))
             _, fg = cv2.threshold(fg, 200, 255, cv2.THRESH_BINARY)
-            if cv2.countNonZero(fg) > 3000 or len(self.fc.detectMultiScale(gray, scale, min_n, minSize=(min_s,min_s))) > 0: 
+            if cv2.countNonZero(fg) > 3000 or len(self.fc.detectMultiScale(gray, scale, min_n, minSize=(min_s,min_s))) > 0:
                 att = True
         else:
             faces = self.fc.detectMultiScale(gray, scale, min_n, minSize=(min_s,min_s))
             if len(faces) > 0:
                 (x,y,w,h) = sorted(faces, key=lambda f: f[2]*f[3], reverse=True)[0]
                 cv2.rectangle(frm, (x,y), (x+w,y+h), (0,255,0), 2)
-                if "Visible" in mode: 
+                if "Visible" in mode:
                     att = True
                 else:
                     eyes = self.ec.detectMultiScale(gray[y:y+int(h/2), x:x+w], 1.1, 10, minSize=(20,20))
-                    if len(eyes) > 0: 
+                    if len(eyes) > 0:
                         att = True
 
         fps = max(1, 1000 // int(config.get("vision_sample_interval", 30)))
         delay_frames = int(config.get("dist_delay", 3)) * fps
         was_lost = self.lf >= delay_frames
-        
-        if not att: 
+
+        if not att:
             self.lf = min(self.lf + 1, delay_frames)
-        else: 
+        else:
             self.lf = max(self.lf - max(1, fps // 2), 0)
-            
+
         is_lost = self.lf >= delay_frames
-        
-        if is_lost and not was_lost: 
+
+        if is_lost and not was_lost:
             self.att_lost.emit()
-        elif not is_lost and was_lost: 
+        elif not is_lost and was_lost:
             self.att_restored.emit()
 
         self.attention_status.emit(att)
