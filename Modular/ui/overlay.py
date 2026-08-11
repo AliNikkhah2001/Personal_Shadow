@@ -44,20 +44,20 @@ class OverlayWidget(QWidget):
             self.bg_override_color = None
         self.update()
 
-    def mousePressEvent(self, e):
+    def mousePressEvent(self, e):  # noqa: N802
         if e.button() == Qt.MouseButton.LeftButton:
             self.oldPos = e.globalPosition().toPoint()
 
-    def mouseMoveEvent(self, e):
+    def mouseMoveEvent(self, e):  # noqa: N802
         if self.oldPos is not None:
             d = e.globalPosition().toPoint() - self.oldPos
             self.move(self.x() + d.x(), self.y() + d.y())
             self.oldPos = e.globalPosition().toPoint()
 
-    def mouseReleaseEvent(self, e):
+    def mouseReleaseEvent(self, e):  # noqa: N802
         self.oldPos = None
 
-    def paintEvent(self, e):
+    def paintEvent(self, e):  # noqa: N802
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         radius = 90

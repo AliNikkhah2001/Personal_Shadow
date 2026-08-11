@@ -47,17 +47,17 @@ class AdvancedPDFCanvas(QLabel):
         self.cur_pt = None
         self.setCursor(Qt.CursorShape.CrossCursor)
 
-    def mousePressEvent(self, e):
+    def mousePressEvent(self, e):  # noqa: N802
         if self.mode != "View" and e.button() == Qt.MouseButton.LeftButton:
             self.start_pt = e.pos()
             self.cur_pt = e.pos()
 
-    def mouseMoveEvent(self, e):
+    def mouseMoveEvent(self, e):  # noqa: N802
         if self.start_pt:
             self.cur_pt = e.pos()
             self.update()
 
-    def mouseReleaseEvent(self, e):
+    def mouseReleaseEvent(self, e):  # noqa: N802
         if self.start_pt and self.cur_pt and e.button() == Qt.MouseButton.LeftButton:
             if self.mode == "Line":
                 self.action_completed.emit(self.mode, (self.start_pt, self.cur_pt), self.page_num)
@@ -71,7 +71,7 @@ class AdvancedPDFCanvas(QLabel):
         self.cur_pt = None
         self.update()
 
-    def paintEvent(self, e):
+    def paintEvent(self, e):  # noqa: N802
         super().paintEvent(e)
         if self.start_pt and self.cur_pt:
             p = QPainter(self)

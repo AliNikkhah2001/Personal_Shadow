@@ -6,24 +6,22 @@ Tests: master node, soft deletes, settings sync, conflict resolution.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import shutil
 import sqlite3
+import sys
 import tempfile
 import unittest
 from datetime import datetime
 
 # Ensure project root is in path
 sys_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if sys_path not in os.path.sys.path:
-    import sys
-
+if sys_path not in sys.path:
     sys.path.insert(0, sys_path)
 
-import contextlib
-
-from core_sys import ConfigManager, DatabaseManager
+from core_sys import ConfigManager, DatabaseManager  # noqa: E402
 
 
 class MockSyncManager:

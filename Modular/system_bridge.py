@@ -11,34 +11,7 @@ import logging
 import os
 import sys
 
-# --- AUTOMATIC GLOBAL AUDIT LOGGING ---
-logging.basicConfig(
-    filename="mindpalace_audit.log",
-    filemode="a",
-    level=logging.DEBUG,
-    format="%(asctime)s [%(threadName)s] %(levelname)s - %(message)s",
-)
-
-
-def global_audit_tracer(frame, event, arg):
-    """Global function call tracer for audit logging."""
-    if event == "call":
-        filename = frame.f_code.co_filename
-        is_bridge_module = (
-            os.path.basename(filename) == "system_bridge.py" or os.path.basename(os.path.dirname(filename)) == "bridge"
-        )
-        if "main.py" in filename or is_bridge_module:
-            func_name = frame.f_code.co_name
-            if not func_name.startswith("<") and func_name not in ["tick", "process_frame", "push_state"]:
-                logging.debug(f"CALL: {func_name} (Line {frame.f_lineno} in {os.path.basename(filename)})")
-    return global_audit_tracer
-
-
-if os.getenv("MINDPALACE_TRACE") == "1":
-    sys.setprofile(global_audit_tracer)
-
-# --------------------------------------
-
+# Force Python to look in the current directory for custom modules
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal, pyqtSlot
@@ -66,6 +39,34 @@ from handlers.wallpaper import WallpaperHandler
 from sync_manager import SyncManager
 from ui import OverlayWidget
 from vision_tracker import VisionTracker
+
+# --- AUTOMATIC GLOBAL AUDIT LOGGING ---
+logging.basicConfig(
+    filename="mindpalace_audit.log",
+    filemode="a",
+    level=logging.DEBUG,
+    format="%(asctime)s [%(threadName)s] %(levelname)s - %(message)s",
+)
+
+
+def global_audit_tracer(frame, event, arg):
+    """Global function call tracer for audit logging."""
+    if event == "call":
+        filename = frame.f_code.co_filename
+        is_bridge_module = (
+            os.path.basename(filename) == "system_bridge.py" or os.path.basename(os.path.dirname(filename)) == "bridge"
+        )
+        if "main.py" in filename or is_bridge_module:
+            func_name = frame.f_code.co_name
+            if not func_name.startswith("<") and func_name not in ["tick", "process_frame", "push_state"]:
+                logging.debug(f"CALL: {func_name} (Line {frame.f_lineno} in {os.path.basename(filename)})")
+    return global_audit_tracer
+
+
+if os.getenv("MINDPALACE_TRACE") == "1":
+    sys.setprofile(global_audit_tracer)
+
+# --------------------------------------
 
 
 class SystemBridge(

@@ -54,7 +54,7 @@ class TimelapseDialog(QDialog):
         else:
             self.tmr.stop()
 
-    def closeEvent(self, e):
+    def closeEvent(self, e):  # noqa: N802
         self.tmr.stop()
         if self.cap:
             self.cap.release()

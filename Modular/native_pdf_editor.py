@@ -57,7 +57,7 @@ class PageWidget(QLabel):
         self._pixmap = None  # Invalidate cache to force a re-render
         self.update()
 
-    def paintEvent(self, event):
+    def paintEvent(self, event):  # noqa: N802
         # Lazy Loading: Only render PyMuPDF to QImage when Qt asks to paint this specific widget
         if self._pixmap is None:
             page = self.doc[self.page_num]
@@ -67,7 +67,7 @@ class PageWidget(QLabel):
             self.setPixmap(self._pixmap)
         super().paintEvent(event)
 
-    def mousePressEvent(self, event):
+    def mousePressEvent(self, event):  # noqa: N802
         if self.editor.current_tool == "Pan":
             return
         self.start_pt = event.pos()
@@ -79,11 +79,11 @@ class PageWidget(QLabel):
         )
         self.rubber_band.show()
 
-    def mouseMoveEvent(self, event):
+    def mouseMoveEvent(self, event):  # noqa: N802
         if self.start_pt and self.rubber_band.isVisible():
             self.rubber_band.setGeometry(QRect(self.start_pt, event.pos()).normalized())
 
-    def mouseReleaseEvent(self, event):
+    def mouseReleaseEvent(self, event):  # noqa: N802
         if self.start_pt and self.rubber_band.isVisible():
             self.rubber_band.hide()
             end_pt = event.pos()
