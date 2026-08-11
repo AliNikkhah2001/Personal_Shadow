@@ -19,7 +19,7 @@ class BodyScanParser:
             "body_fat": [609, 1206, 207, 109],
             "muscle_mass": [66, 2529, 207, 97],
             "water": [79, 2852, 188, 73],
-            "bmr": [576, 2221, 230, 95]
+            "bmr": [576, 2221, 230, 95],
         }
 
         if os.path.exists(rois_file):
@@ -35,9 +35,9 @@ class BodyScanParser:
 
     def clean_number(self, text):
         # Replace commas with dots (common OCR mistake for decimals) and strip newlines
-        text = text.replace(',', '.').replace('..', '.').replace('\n', ' ').strip()
+        text = text.replace(",", ".").replace("..", ".").replace("\n", " ").strip()
         # Find the first sequence of digits and optional decimal point
-        match = re.search(r'(\d+\.?\d*)', text)
+        match = re.search(r"(\d+\.?\d*)", text)
         if match:
             try:
                 return float(match.group(1))
@@ -74,7 +74,7 @@ class BodyScanParser:
                 _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
 
                 # Relaxed config: No whitelist. Let it read 'kg', '%', 'kcal' naturally.
-                text = pytesseract.image_to_string(thresh, config='--psm 7')
+                text = pytesseract.image_to_string(thresh, config="--psm 7")
 
                 val = self.clean_number(text)
                 results[key] = val

@@ -1,7 +1,6 @@
         const HealthFitnessView = ({ backend, healthProfile, setHealthProfile, healthLogs, setHealthLogs, customFoods, customActivities, healthPlans, ingredients, setIngredients, compositeFoods, setCompositeFoods, onScanParsed }) => {
                     const [activeTab, setActiveTab] = useState('dashboard');
                     const [intakeTab, setIntakeTab] = useState('diary'); // 'diary', 'ingredients', 'builder'
-                    
                     // Exercise States
                     const [exName, setExName] = useState("");
                     const [exDur, setExDur] = useState("");
@@ -189,6 +188,7 @@
                             <div className="flex gap-6 border-b border-white/10 mb-6 shrink-0">
                                 <button onClick={() => setActiveTab('dashboard')} className={`pb-2 text-xs font-bold uppercase tracking-widest transition-all ${activeTab === 'dashboard' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-500 hover:text-gray-300'}`}>Insights & Dashboard</button>
                                 <button onClick={() => setActiveTab('intake')} className={`pb-2 text-xs font-bold uppercase tracking-widest transition-all ${activeTab === 'intake' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-500 hover:text-gray-300'}`}>Log & Intake</button>
+                                <button onClick={() => setActiveTab('food_camera')} className={`pb-2 text-xs font-bold uppercase tracking-widest transition-all ${activeTab === 'food_camera' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-500 hover:text-gray-300'}`}>AI Food Scan</button>
                                 <button onClick={() => setActiveTab('planning')} className={`pb-2 text-xs font-bold uppercase tracking-widest transition-all ${activeTab === 'planning' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-500 hover:text-gray-300'}`}>Plans & Programs</button>
                             </div>
 
@@ -257,7 +257,7 @@
                                                     }}>
                                                         <option value="">Select Item...</option>
                                                         <optgroup label="Ingredients / Standard Foods">
-                                                            {ingredients.map(i => <option key={`ing-${i.id}`} value={i.name} data-type="ing">{i.is_iranian ? '🇮🇷' : '🥩'} {i.name}</option>)}
+                                                            {ingredients.map(i => <option key={`ing-${i.id}`} value={i.name} data-type="ing">{i.is_iranian ? '🍽️' : '🥩'} {i.name}</option>)}
                                                         </optgroup>
                                                         <optgroup label="Composite Recipes">
                                                             {compositeFoods.map(c => <option key={`rec-${c.id}`} value={c.name} data-type="recipe">🍲 {c.name}</option>)}
@@ -291,7 +291,7 @@
                                                 </div>
                                                 <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer p-2 bg-black/40 rounded border border-white/10">
                                                     <input type="checkbox" className="w-4 h-4 accent-blue-500" checked={isIranian} onChange={e=>setIsIranian(e.target.checked)} />
-                                                    Flag as Iranian/Persian Culture Food 🇮🇷
+                                                    Flag as Persian Culture Food 🍽️
                                                 </label>
                                                 <button onClick={saveIngredient} className="glass-button w-full py-2 rounded text-[11px] font-bold tracking-widest text-blue-300 uppercase border border-blue-500/30 bg-blue-900/30 hover:bg-blue-600 hover:text-white transition">Save Ingredient</button>
                                             </div>
@@ -376,7 +376,7 @@
                                                 <div className="flex flex-col gap-1">
                                                     {ingredients.map(i => (
                                                         <div key={i.id} className="flex justify-between items-center text-xs p-2 bg-black/40 rounded border border-white/5">
-                                                            <span>{i.is_iranian ? '🇮🇷' : '🥩'} {i.name}</span>
+                                                            <span>{i.is_iranian ? '🍽️' : '🥩'} {i.name}</span>
                                                             <div className="flex items-center gap-3">
                                                                 <span className="text-blue-400 font-mono">{i.kcal} kcal</span>
                                                                 <i onClick={() => backend.request(JSON.stringify({action: 'manage_nutrition', sub: 'delete_ingredient', id: i.id})).then(res=>{const d=JSON.parse(res);setIngredients(d.ingredients);setCompositeFoods(d.composite_foods);})} className="fas fa-trash text-red-500 cursor-pointer opacity-50 hover:opacity-100"></i>
@@ -421,7 +421,9 @@
                                 </div>
                             )}
 
-                            {activeTab === 'planning' && (
+                             <HealthFoodCamera active={activeTab === 'food_camera'} backend={backend} logEntry={logEntry} todayFood={todayFood} />
+
+                             {activeTab === 'planning' && (
                                 <div className="flex flex-col lg:flex-row gap-6 h-full overflow-hidden">
                                     <div className="w-full lg:w-1/3 flex flex-col gap-4">
                                         <div className="glass-panel p-4 flex flex-col gap-3">

@@ -277,6 +277,7 @@ python -m ruff format .
 ```python
 from handlers import ActionHandler
 
+
 class MyNewHandler(ActionHandler):
     actions = {
         "my_action": "handle_my_action",

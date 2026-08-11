@@ -1,4 +1,5 @@
 """Quick startup test for Mind Palace OS."""
+
 import os
 import sys
 
@@ -6,8 +7,9 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from PyQt6.QtWidgets import QApplication
-from system_bridge import SystemBridge
+
 from core_sys import db
+from system_bridge import SystemBridge
 
 app = QApplication(sys.argv)
 bridge = SystemBridge()

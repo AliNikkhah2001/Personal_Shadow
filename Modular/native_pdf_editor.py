@@ -27,6 +27,7 @@ class PageWidget(QLabel):
     Hardware-Accelerated Lazy Loading Page Widget.
     Performs true PDF text intersection mapping for annotations.
     """
+
     def __init__(self, doc, page_num, editor):
         super().__init__()
         self.doc = doc
@@ -45,15 +46,15 @@ class PageWidget(QLabel):
 
         # Sleek shadow and border for the page
         self.setStyleSheet("""
-            background-color: white; 
-            border: 1px solid #27272a; 
+            background-color: white;
+            border: 1px solid #27272a;
             margin-bottom: 20px;
         """)
 
     def update_zoom(self, new_scale):
         self.scale = new_scale
         self.setFixedSize(int(self.pdf_rect.width * self.scale), int(self.pdf_rect.height * self.scale))
-        self._pixmap = None # Invalidate cache to force a re-render
+        self._pixmap = None  # Invalidate cache to force a re-render
         self.update()
 
     def paintEvent(self, event):
@@ -67,12 +68,15 @@ class PageWidget(QLabel):
         super().paintEvent(event)
 
     def mousePressEvent(self, event):
-        if self.editor.current_tool == "Pan": return
+        if self.editor.current_tool == "Pan":
+            return
         self.start_pt = event.pos()
         self.rubber_band.setGeometry(QRect(self.start_pt, QSize()))
         # Match Rubberband color to the active tool color
         r, g, b = self.editor.current_color
-        self.rubber_band.setStyleSheet(f"background-color: rgba({int(r*255)}, {int(g*255)}, {int(b*255)}, 60); border: 1px solid rgba({int(r*255)}, {int(g*255)}, {int(b*255)}, 200);")
+        self.rubber_band.setStyleSheet(
+            f"background-color: rgba({int(r * 255)}, {int(g * 255)}, {int(b * 255)}, 60); border: 1px solid rgba({int(r * 255)}, {int(g * 255)}, {int(b * 255)}, 200);"
+        )
         self.rubber_band.show()
 
     def mouseMoveEvent(self, event):
@@ -88,11 +92,13 @@ class PageWidget(QLabel):
 
     def apply_annotation(self, start, end):
         rect = QRect(start, end).normalized()
-        if rect.width() < 5 or rect.height() < 5: return
+        if rect.width() < 5 or rect.height() < 5:
+            return
 
         # Convert Screen CSS Pixels -> Absolute PDF Points
-        rect_pdf = fitz.Rect(rect.left() / self.scale, rect.top() / self.scale,
-                             rect.right() / self.scale, rect.bottom() / self.scale)
+        rect_pdf = fitz.Rect(
+            rect.left() / self.scale, rect.top() / self.scale, rect.right() / self.scale, rect.bottom() / self.scale
+        )
 
         page = self.doc[self.page_num]
         tool = self.editor.current_tool
@@ -143,7 +149,7 @@ class PageWidget(QLabel):
             except Exception as e:
                 self.editor.statusBar().showMessage(f"Error saving: {e!s}", 4000)
 
-            self._pixmap = None # Force a re-render of this page
+            self._pixmap = None  # Force a re-render of this page
             self.update()
 
 
@@ -158,10 +164,10 @@ class NativePDFEditor(QMainWindow):
         # Predefined PyMuPDF RGB tuples (0.0 to 1.0)
         self.color_palette = {
             "Yellow": (1.0, 0.9, 0.2),
-            "Green":  (0.2, 0.8, 0.2),
-            "Blue":   (0.2, 0.6, 1.0),
-            "Pink":   (1.0, 0.4, 0.7),
-            "Purple": (0.6, 0.2, 0.8)
+            "Green": (0.2, 0.8, 0.2),
+            "Blue": (0.2, 0.6, 1.0),
+            "Pink": (1.0, 0.4, 0.7),
+            "Purple": (0.6, 0.2, 0.8),
         }
         self.current_color = self.color_palette["Yellow"]
 
@@ -202,10 +208,12 @@ class NativePDFEditor(QMainWindow):
             btn.clicked.connect(lambda checked, name=t: self.set_tool(name))
             self.top_bar.addWidget(btn)
             self.tool_grp.addButton(btn)
-            if t == "Highlight": btn.setChecked(True)
+            if t == "Highlight":
+                btn.setChecked(True)
 
         # Spacer
-        spacer1 = QWidget(); spacer1.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        spacer1 = QWidget()
+        spacer1.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.top_bar.addWidget(spacer1)
 
         # Color Group
@@ -217,12 +225,15 @@ class NativePDFEditor(QMainWindow):
             btn.setFixedSize(24, 24)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             # Convert 0-1 float back to 0-255 int for CSS
-            css_color = f"rgb({int(rgb[0]*255)}, {int(rgb[1]*255)}, {int(rgb[2]*255)})"
-            btn.setStyleSheet(f"QPushButton {{ background-color: {css_color}; border-radius: 12px; border: 2px solid transparent; }} QPushButton:checked {{ border: 2px solid white; }}")
+            css_color = f"rgb({int(rgb[0] * 255)}, {int(rgb[1] * 255)}, {int(rgb[2] * 255)})"
+            btn.setStyleSheet(
+                f"QPushButton {{ background-color: {css_color}; border-radius: 12px; border: 2px solid transparent; }} QPushButton:checked {{ border: 2px solid white; }}"
+            )
             btn.clicked.connect(lambda checked, c=rgb: self.set_color(c))
             self.top_bar.addWidget(btn)
             self.color_grp.addButton(btn)
-            if name == "Yellow": btn.setChecked(True)
+            if name == "Yellow":
+                btn.setChecked(True)
 
         # 3. Continuous Scroll Viewport
         self.scroll_area = QScrollArea()
@@ -262,7 +273,8 @@ class NativePDFEditor(QMainWindow):
         self.page_input.returnPressed.connect(self.jump_to_page)
         self.bottom_bar.addWidget(self.page_input)
 
-        spacer2 = QWidget(); spacer2.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        spacer2 = QWidget()
+        spacer2.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.bottom_bar.addWidget(spacer2)
 
         btn_z_out = QPushButton("Zoom -")
@@ -311,7 +323,7 @@ class NativePDFEditor(QMainWindow):
         y_scroll = self.scroll_area.verticalScrollBar().value()
         # Find which page widget intersects this Y coordinate
         for i, pw in enumerate(self.page_widgets):
-            if pw.pos().y() + pw.height() > y_scroll + 100: # 100px threshold
+            if pw.pos().y() + pw.height() > y_scroll + 100:  # 100px threshold
                 self.lbl_page.setText(f" Page: {i + 1} / {len(self.doc)} ")
                 break
 
@@ -323,6 +335,7 @@ class NativePDFEditor(QMainWindow):
         QShortcut(QKeySequence("Up"), self, lambda: scroll.setValue(scroll.value() - 80))
         QShortcut(QKeySequence("PageDown"), self, lambda: scroll.setValue(scroll.value() + 600))
         QShortcut(QKeySequence("PageUp"), self, lambda: scroll.setValue(scroll.value() - 600))
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

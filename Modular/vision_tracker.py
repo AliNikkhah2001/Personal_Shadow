@@ -17,14 +17,15 @@ class StreamState:
     frame = None
     lock = threading.Lock()
 
+
 class StreamingHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        if self.path == '/video_feed':
+        if self.path == "/video_feed":
             self.send_response(200)
-            self.send_header('Age', 0)
-            self.send_header('Cache-Control', 'no-cache, private')
-            self.send_header('Pragma', 'no-cache')
-            self.send_header('Content-Type', 'multipart/x-mixed-replace; boundary=FRAME')
+            self.send_header("Age", 0)
+            self.send_header("Cache-Control", "no-cache, private")
+            self.send_header("Pragma", "no-cache")
+            self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=FRAME")
             self.end_headers()
             try:
                 while True:
@@ -32,23 +33,25 @@ class StreamingHandler(BaseHTTPRequestHandler):
                         if StreamState.frame is None:
                             time.sleep(0.1)
                             continue
-                        _, jpeg = cv2.imencode('.jpg', StreamState.frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+                        _, jpeg = cv2.imencode(".jpg", StreamState.frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
 
-                    self.wfile.write(b'--FRAME\r\n')
-                    self.send_header('Content-Type', 'image/jpeg')
-                    self.send_header('Content-Length', len(jpeg))
+                    self.wfile.write(b"--FRAME\r\n")
+                    self.send_header("Content-Type", "image/jpeg")
+                    self.send_header("Content-Length", len(jpeg))
                     self.end_headers()
                     self.wfile.write(jpeg.tobytes())
-                    self.wfile.write(b'\r\n')
-                    time.sleep(0.06) # Throttle to roughly 15 FPS
+                    self.wfile.write(b"\r\n")
+                    time.sleep(0.06)  # Throttle to roughly 15 FPS
             except Exception:
                 pass
         else:
             self.send_error(404)
             self.end_headers()
 
+
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     """Handle requests in a separate thread."""
+
 
 class VisionTracker(QObject):
     attention_status = pyqtSignal(bool)
@@ -83,7 +86,7 @@ class VisionTracker(QObject):
 
         # Start the background HTTP streaming server on port 5050
         try:
-            self.server = ThreadedHTTPServer(('127.0.0.1', 5050), StreamingHandler)
+            self.server = ThreadedHTTPServer(("127.0.0.1", 5050), StreamingHandler)
             threading.Thread(target=self.server.serve_forever, daemon=True).start()
         except OSError:
             print("Port 5050 already in use, stream server might already be running.")
@@ -92,12 +95,15 @@ class VisionTracker(QObject):
         if self.tmr.isActive():
             self.tmr.setInterval(config.get("vision_sample_interval", 30))
 
-    def start(self):
-        if config.get("quiet_mode", False): return
+    def start(self, *, force=False):
+        if config.get("quiet_mode", False) and not force:
+            return
         if not self.cap or not self.cap.isOpened():
             for i in [0, 1]:
-                if sys.platform == "win32": tc = cv2.VideoCapture(i, cv2.CAP_DSHOW)
-                else: tc = cv2.VideoCapture(i)
+                if sys.platform == "win32":
+                    tc = cv2.VideoCapture(i, cv2.CAP_DSHOW)
+                else:
+                    tc = cv2.VideoCapture(i)
                 if tc.isOpened():
                     self.cap = tc
                     break
@@ -123,7 +129,7 @@ class VisionTracker(QObject):
         self.v_path = path
         self.last_frame_time = time.time()
         os.makedirs("timelapses", exist_ok=True)
-        self.writer = cv2.VideoWriter(self.v_path, cv2.VideoWriter_fourcc(*'MJPG'), 15.0, (640, 480))
+        self.writer = cv2.VideoWriter(self.v_path, cv2.VideoWriter_fourcc(*"MJPG"), 15.0, (640, 480))
 
     def stop_rec(self):
         self.is_rec = False
@@ -170,17 +176,20 @@ class VisionTracker(QObject):
         if "Presence" in mode:
             fg = self.bg_sub.apply(cv2.GaussianBlur(gray, (21, 21), 0))
             _, fg = cv2.threshold(fg, 200, 255, cv2.THRESH_BINARY)
-            if cv2.countNonZero(fg) > 3000 or len(self.fc.detectMultiScale(gray, scale, min_n, minSize=(min_s,min_s))) > 0:
+            if (
+                cv2.countNonZero(fg) > 3000
+                or len(self.fc.detectMultiScale(gray, scale, min_n, minSize=(min_s, min_s))) > 0
+            ):
                 att = True
         else:
-            faces = self.fc.detectMultiScale(gray, scale, min_n, minSize=(min_s,min_s))
+            faces = self.fc.detectMultiScale(gray, scale, min_n, minSize=(min_s, min_s))
             if len(faces) > 0:
-                (x,y,w,h) = sorted(faces, key=lambda f: f[2]*f[3], reverse=True)[0]
-                cv2.rectangle(frm, (x,y), (x+w,y+h), (0,255,0), 2)
+                (x, y, w, h) = sorted(faces, key=lambda f: f[2] * f[3], reverse=True)[0]
+                cv2.rectangle(frm, (x, y), (x + w, y + h), (0, 255, 0), 2)
                 if "Visible" in mode:
                     att = True
                 else:
-                    eyes = self.ec.detectMultiScale(gray[y:y+int(h/2), x:x+w], 1.1, 10, minSize=(20,20))
+                    eyes = self.ec.detectMultiScale(gray[y : y + int(h / 2), x : x + w], 1.1, 10, minSize=(20, 20))
                     if len(eyes) > 0:
                         att = True
 

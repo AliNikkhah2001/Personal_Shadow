@@ -10,6 +10,7 @@ const ProductivityHubView = ({ backend, timerState, flatGoals, queue, refreshQue
             const timelinePixelPerHour = settings?.timeline_pixel_per_hour ?? 120;
             const timelineHours = timelineEndHour - timelineStartHour;
             const timelineWidth = timelineHours * timelinePixelPerHour;
+            const pxPerMin = timelinePixelPerHour / 60;
 
             // History Tab States
             const [historyData, setHistoryData] = useState([]);
@@ -36,7 +37,6 @@ const ProductivityHubView = ({ backend, timerState, flatGoals, queue, refreshQue
                     const now = new Date();
                     const mins = now.getHours() * 60 + now.getMinutes();
                     const relativeMins = mins - (timelineStartHour * 60);
-                    const pxPerMin = timelinePixelPerHour / 60;
                     const scrollTarget = (relativeMins * pxPerMin) - (timelineContainerRef.current.clientWidth / 2);
                     timelineContainerRef.current.scrollLeft = Math.max(0, scrollTarget);
                 }

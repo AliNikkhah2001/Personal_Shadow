@@ -7,7 +7,7 @@ import matplotlib
 import requests
 import urllib3
 
-matplotlib.use('Agg')
+matplotlib.use("Agg")
 from PyQt6.QtCore import Qt, QThread, QUrl, pyqtSignal
 from PyQt6.QtGui import QFont, QIcon
 from PyQt6.QtWebChannel import QWebChannel
@@ -25,25 +25,35 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # --- AUTOMATIC GLOBAL AUDIT LOGGING ---
 logging.basicConfig(
-    filename='mindpalace_audit.log',
-    filemode='a',
+    filename="mindpalace_audit.log",
+    filemode="a",
     level=logging.DEBUG,
-    format='%(asctime)s [%(threadName)s] %(levelname)s - %(message)s'
+    format="%(asctime)s [%(threadName)s] %(levelname)s - %(message)s",
 )
 
+
 def global_audit_tracer(frame, event, arg):
-    if event == 'call':
+    if event == "call":
         filename = frame.f_code.co_filename
         # Only log our own files to prevent spamming PyQt internals
-        if 'main.py' in filename or 'system_bridge.py' in filename:
+        if "main.py" in filename or "system_bridge.py" in filename:
             func_name = frame.f_code.co_name
             # Exclude very high-frequency loops like tick() and UI paints
-            if not func_name.startswith('<') and func_name not in ['tick', 'chk_fcs', 'process', 'paintEvent', 'update_frame']:
+            if not func_name.startswith("<") and func_name not in [
+                "tick",
+                "chk_fcs",
+                "process",
+                "paintEvent",
+                "update_frame",
+            ]:
                 logging.debug(f"CALL: {func_name} (Line {frame.f_lineno} in {os.path.basename(filename)})")
     return global_audit_tracer
 
-sys.setprofile(global_audit_tracer)
+
+if os.getenv("MINDPALACE_TRACE") == "1":
+    sys.setprofile(global_audit_tracer)
 # --------------------------------------
+
 
 class DownloaderThread(QThread):
     progress = pyqtSignal(int)
@@ -51,7 +61,7 @@ class DownloaderThread(QThread):
     finished = pyqtSignal()
 
     def run(self):
-        dirs = ['js', 'css', 'webfonts', 'img']
+        dirs = ["js", "css", "webfonts", "img"]
         for d in dirs:
             os.makedirs(os.path.join(CACHE_DIR, d), exist_ok=True)
 
@@ -62,10 +72,20 @@ class DownloaderThread(QThread):
             ("js/tailwind.js", "https://cdn.tailwindcss.com"),
             ("js/marked.js", "https://cdn.jsdelivr.net/npm/marked/marked.min.js"),
             ("js/chart.umd.js", "https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"),
+            ("js/three.module.js", "https://unpkg.com/three@0.160.0/build/three.module.js"),
             ("css/all.min.css", "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"),
-            ("webfonts/fa-solid-900.woff2", "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/webfonts/fa-solid-900.woff2"),
-            ("webfonts/fa-regular-400.woff2", "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/webfonts/fa-regular-400.woff2"),
-            ("webfonts/fa-brands-400.woff2", "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/webfonts/fa-brands-400.woff2")
+            (
+                "webfonts/fa-solid-900.woff2",
+                "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/webfonts/fa-solid-900.woff2",
+            ),
+            (
+                "webfonts/fa-regular-400.woff2",
+                "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/webfonts/fa-regular-400.woff2",
+            ),
+            (
+                "webfonts/fa-brands-400.woff2",
+                "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/webfonts/fa-brands-400.woff2",
+            ),
         ]
 
         for i, (path, url) in enumerate(assets):
@@ -74,9 +94,9 @@ class DownloaderThread(QThread):
                 self.status.emit(f"Caching {path.split('/')[-1]}...")
                 try:
                     r = requests.get(url, timeout=15)
-                    with open(target, 'wb') as f:
+                    with open(target, "wb") as f:
                         f.write(r.content)
-                except:
+                except Exception:
                     pass
             self.progress.emit(int(((i + 1) / len(assets)) * 70))
 
@@ -90,17 +110,17 @@ class DownloaderThread(QThread):
                 css_content = r.text
                 urls = re.findall(r'url\([\'"]?(https://[^\'")]+)[\'"]?\)', css_content)
                 for url in set(urls):
-                    fname = url.split('/')[-1]
-                    wpath = os.path.join(CACHE_DIR, 'webfonts', fname)
+                    fname = url.split("/")[-1]
+                    wpath = os.path.join(CACHE_DIR, "webfonts", fname)
                     if not os.path.exists(wpath):
                         self.status.emit(f"Downloading font {fname}...")
                         wr = requests.get(url, headers=headers, timeout=15)
-                        with open(wpath, 'wb') as f:
+                        with open(wpath, "wb") as f:
                             f.write(wr.content)
                     css_content = css_content.replace(url, f"../webfonts/{fname}")
-                with open(css_path, 'w') as f:
+                with open(css_path, "w") as f:
                     f.write(css_content)
-            except:
+            except Exception:
                 pass
 
         self.progress.emit(100)
@@ -121,7 +141,9 @@ class SplashScreen(QWidget):
         self.pbar = QProgressBar()
         self.pbar.setRange(0, 100)
         self.pbar.setValue(0)
-        self.pbar.setStyleSheet("QProgressBar { border: 1px solid #1e1e2b; border-radius: 6px; text-align: center; background-color: #14141d; color: white; font-weight: bold; } QProgressBar::chunk { background-color: #3b82f6; border-radius: 5px; }")
+        self.pbar.setStyleSheet(
+            "QProgressBar { border: 1px solid #1e1e2b; border-radius: 6px; text-align: center; background-color: #14141d; color: white; font-weight: bold; } QProgressBar::chunk { background-color: #3b82f6; border-radius: 5px; }"
+        )
 
         lay.addStretch()
         lay.addWidget(self.lbl)
@@ -168,6 +190,7 @@ class MindPalaceWebOS(QMainWindow):
         base_url = QUrl.fromLocalFile(os.path.abspath(".") + os.sep)
         self.browser.setHtml(html_content, base_url)
         self.setCentralWidget(self.browser)
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

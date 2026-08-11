@@ -242,6 +242,13 @@
                                 if (d.today_sessions) setTodaySessions(d.today_sessions);
                                 if (d.studied_hours) setStudiedHours(d.studied_hours);
                             });
+
+                            py.request(JSON.stringify({action: 'get_active_wallpaper'})).then(r => {
+                                const wallpaper = JSON.parse(r);
+                                if (wallpaper.data_url) {
+                                    setSettings(prev => ({...prev, bg_image_path: '', bg_image_data_url: wallpaper.data_url}));
+                                }
+                            });
                             
                             // Fetch daily check-in
                             py.request(JSON.stringify({action: 'manage_analytics', sub: 'get_daily_checkin'})).then(r => {
@@ -265,7 +272,7 @@
 
             // Safe fallback logic for Background Image
             useEffect(() => {
-                const bg = settings.bg_image_path !== undefined ? settings.bg_image_path : 'img/bg.jpg';
+                const bg = settings.bg_image_data_url || (settings.bg_image_path !== undefined ? settings.bg_image_path : 'img/bg.jpg');
                 document.body.style.backgroundImage = `url('${bg}')`;
                 document.body.style.backgroundSize = 'cover';
                 document.body.style.backgroundPosition = 'center';
@@ -273,7 +280,7 @@
                 
                 if (settings.font_family) document.body.style.fontFamily = settings.font_family;
                 if (settings.font_color) document.body.style.color = settings.font_color;
-            }, [settings.bg_image_path, settings.font_family, settings.font_color]);
+            }, [settings.bg_image_data_url, settings.bg_image_path, settings.font_family, settings.font_color]);
             
             const renderContent = () => {
                 switch(currentView) {
@@ -303,7 +310,7 @@
 <div className={`px-4 md:px-8 mb-8 flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-start'} gap-3 transition-all`}>
     <img src="../assets/logo.svg" alt="Mind Palace Logo" className="w-8 h-8 md:w-10 md:h-10 shrink-0 drop-shadow-[0_0_10px_rgba(59,130,246,0.6)]" />
     {!isSidebarCollapsed && (
-        <h1 className="text-xl font-serif font-bold tracking-widest text-white uppercase drop-shadow-md whitespace-nowrap overflow-hidden"></h1>
+        <h1 className="text-xl font-serif font-bold tracking-widest text-white uppercase drop-shadow-md whitespace-nowrap overflow-hidden">Mind Palace OS</h1>
     )}
 </div>
                         

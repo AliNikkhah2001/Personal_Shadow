@@ -35,7 +35,7 @@ class NutritionHandler(ActionHandler):
 
     def estimate_calories_opencv(self, req: dict[str, Any]) -> str:
         """Estimate calories from food image using OpenCV.
-        
+
         Future scope: This is a placeholder for computer vision based
         calorie estimation. Requires trained models for:
         - Food detection/classification
@@ -45,19 +45,21 @@ class NutritionHandler(ActionHandler):
         image_path = req.get("image_path")
         if not image_path:
             return json.dumps({"error": "No image path provided"})
-        
+
         # This is a framework - actual implementation would use trained models
-        return json.dumps({
-            "status": "framework_ready",
-            "message": "OpenCV calorie estimation framework is ready. Requires trained models for production use.",
-            "components_needed": [
-                "Food detection model (YOLO/EfficientDet)",
-                "Instance segmentation model (Mask R-CNN)",
-                "Reference object detection for scale",
-                "Nutrition database integration"
-            ],
-            "estimated_detections": []
-        })
+        return json.dumps(
+            {
+                "status": "framework_ready",
+                "message": "OpenCV calorie estimation framework is ready. Requires trained models for production use.",
+                "components_needed": [
+                    "Food detection model (YOLO/EfficientDet)",
+                    "Instance segmentation model (Mask R-CNN)",
+                    "Reference object detection for scale",
+                    "Nutrition database integration",
+                ],
+                "estimated_detections": [],
+            }
+        )
 
     def _get_all(self) -> str:
         db.c.execute(
@@ -80,7 +82,9 @@ class NutritionHandler(ActionHandler):
             for r in db.c.fetchall()
         ]
 
-        db.c.execute("SELECT id, name, image_path, instructions, prep_time_min, cook_time_min, servings FROM composite_foods ORDER BY name")
+        db.c.execute(
+            "SELECT id, name, image_path, instructions, prep_time_min, cook_time_min, servings FROM composite_foods ORDER BY name"
+        )
         composites = []
         for c_id, c_name, c_img, c_instructions, c_prep, c_cook, c_servings in db.c.fetchall():
             db.c.execute(
@@ -163,7 +167,16 @@ class NutritionHandler(ActionHandler):
         try:
             db.c.execute(
                 "INSERT INTO composite_foods (uuid, modified_at, name, image_path, instructions, prep_time_min, cook_time_min, servings) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (c_uuid, datetime.now().isoformat(), req.get("name"), req.get("image_path", ""), req.get("instructions", ""), int(req.get("prep_time_min") or 0), int(req.get("cook_time_min") or 0), int(req.get("servings") or 1)),
+                (
+                    c_uuid,
+                    datetime.now().isoformat(),
+                    req.get("name"),
+                    req.get("image_path", ""),
+                    req.get("instructions", ""),
+                    int(req.get("prep_time_min") or 0),
+                    int(req.get("cook_time_min") or 0),
+                    int(req.get("servings") or 1),
+                ),
             )
             c_id = db.c.lastrowid
             for part in req.get("parts", []):

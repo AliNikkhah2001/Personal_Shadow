@@ -3,9 +3,9 @@
 Tests the SystemBridge backend without requiring the full UI.
 Verifies imports, database, and basic functionality.
 """
+
 from __future__ import annotations
 
-import json
 import os
 import sys
 import unittest
@@ -18,38 +18,36 @@ class TestImports(unittest.TestCase):
     """Test that all modules can be imported without errors."""
 
     def test_core_sys_import(self):
-        from core_sys import config, db, get_color
+        from core_sys import config, db
+
         self.assertIsNotNone(config)
         self.assertIsNotNone(db)
 
     def test_handlers_import(self):
         from handlers import ActionHandler
-        from handlers.nutrition import NutritionHandler
-        from handlers.health import HealthHandler
-        from handlers.habit import HabitHandler
-        from handlers.flashcard import FlashcardHandler
-        from handlers.goal import GoalHandler
-        from handlers.note import NoteHandler
-        from handlers.queue import QueueHandler
-        from handlers.sync import SyncHandler
+
         self.assertTrue(hasattr(ActionHandler, "handle"))
 
     def test_ui_import(self):
-        from ui import OverlayWidget, AdvancedPDFWindow, TimelapseDialog
+        from ui import AdvancedPDFWindow, OverlayWidget, TimelapseDialog
+
         self.assertIsNotNone(OverlayWidget)
         self.assertIsNotNone(AdvancedPDFWindow)
         self.assertIsNotNone(TimelapseDialog)
 
     def test_vision_tracker_import(self):
         from vision_tracker import VisionTracker
+
         self.assertIsNotNone(VisionTracker)
 
     def test_sync_manager_import(self):
         from sync_manager import SyncManager
+
         self.assertIsNotNone(SyncManager)
 
     def test_horology_import(self):
         from horology import draw_clock_face, draw_clock_ticks_and_indices
+
         self.assertIsNotNone(draw_clock_face)
         self.assertIsNotNone(draw_clock_ticks_and_indices)
 
@@ -59,6 +57,7 @@ class TestDatabase(unittest.TestCase):
 
     def setUp(self):
         from core_sys import db
+
         self.db = db
 
     def test_db_connection(self):
@@ -97,6 +96,7 @@ class TestConfig(unittest.TestCase):
 
     def setUp(self):
         from core_sys import config
+
         self.config = config
 
     def test_get_existing_key(self):
@@ -109,6 +109,7 @@ class TestConfig(unittest.TestCase):
 
     def test_set_and_get(self):
         import uuid
+
         test_key = f"test_key_{uuid.uuid4().hex[:8]}"
         self.config.set(test_key, "test_value")
         value = self.config.get(test_key)
@@ -122,7 +123,7 @@ class TestConfig(unittest.TestCase):
         start_hour = self.config.get("timeline_start_hour")
         end_hour = self.config.get("timeline_end_hour")
         pixel_per_hour = self.config.get("timeline_pixel_per_hour")
-        
+
         self.assertEqual(start_hour, 0)
         self.assertEqual(end_hour, 24)
         self.assertEqual(pixel_per_hour, 120)
@@ -132,11 +133,11 @@ class TestConfig(unittest.TestCase):
         self.config.set("timeline_start_hour", 6)
         self.config.set("timeline_end_hour", 22)
         self.config.set("timeline_pixel_per_hour", 150)
-        
+
         self.assertEqual(self.config.get("timeline_start_hour"), 6)
         self.assertEqual(self.config.get("timeline_end_hour"), 22)
         self.assertEqual(self.config.get("timeline_pixel_per_hour"), 150)
-        
+
         # Cleanup - reset to defaults
         self.config.set("timeline_start_hour", 0)
         self.config.set("timeline_end_hour", 24)
@@ -145,48 +146,71 @@ class TestConfig(unittest.TestCase):
 
 class TestNutritionSchema(unittest.TestCase):
     """Test nutrition database schema."""
-    
+
     def setUp(self):
         from core_sys import db
+
         self.db = db
-    
+
     def test_ingredients_table_exists(self):
         self.db.c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='ingredients'")
         result = self.db.c.fetchone()
         self.assertIsNotNone(result)
         self.assertEqual(result[0], "ingredients")
-    
+
     def test_composite_foods_table_exists(self):
         self.db.c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='composite_foods'")
         result = self.db.c.fetchone()
         self.assertIsNotNone(result)
         self.assertEqual(result[0], "composite_foods")
-    
+
     def test_recipe_ingredients_table_exists(self):
         self.db.c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='recipe_ingredients'")
         result = self.db.c.fetchone()
         self.assertIsNotNone(result)
         self.assertEqual(result[0], "recipe_ingredients")
-    
+
     def test_food_logs_table_exists(self):
         self.db.c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='food_logs'")
         result = self.db.c.fetchone()
         self.assertIsNotNone(result)
         self.assertEqual(result[0], "food_logs")
-    
+
     def test_ingredients_schema(self):
         self.db.c.execute("PRAGMA table_info(ingredients)")
         cols = [col[1] for col in self.db.c.fetchall()]
-        expected_cols = ["id", "uuid", "modified_at", "name", "kcal", "protein", "fat", "carbs", 
-                         "serving_size", "serving_unit", "category", "image_path", "is_iranian"]
+        expected_cols = [
+            "id",
+            "uuid",
+            "modified_at",
+            "name",
+            "kcal",
+            "protein",
+            "fat",
+            "carbs",
+            "serving_size",
+            "serving_unit",
+            "category",
+            "image_path",
+            "is_iranian",
+        ]
         for col in expected_cols:
             self.assertIn(col, cols, f"Column {col} missing from ingredients table")
-    
+
     def test_composite_foods_schema(self):
         self.db.c.execute("PRAGMA table_info(composite_foods)")
         cols = [col[1] for col in self.db.c.fetchall()]
-        expected_cols = ["id", "uuid", "modified_at", "name", "image_path", "instructions", 
-                         "prep_time_min", "cook_time_min", "servings"]
+        expected_cols = [
+            "id",
+            "uuid",
+            "modified_at",
+            "name",
+            "image_path",
+            "instructions",
+            "prep_time_min",
+            "cook_time_min",
+            "servings",
+        ]
         for col in expected_cols:
             self.assertIn(col, cols, f"Column {col} missing from composite_foods table")
 
@@ -205,6 +229,17 @@ class TestSystemBridgeDispatch(unittest.TestCase):
         handler = FlashcardHandler(MockBridge())
         self.assertIn("manage_flashcard", handler.actions)
         self.assertIn("manage_quiz", handler.actions)
+
+    def test_food_detection_handler(self):
+        """Test that FoodDetectionHandler can be instantiated and has expected actions."""
+        from handlers.food_detection import FoodDetectionHandler
+
+        class MockBridge:
+            pass
+
+        handler = FoodDetectionHandler(MockBridge())
+        self.assertIn("detect_food", handler.actions)
+        self.assertIn("estimate_food_calories", handler.actions)
 
 
 if __name__ == "__main__":

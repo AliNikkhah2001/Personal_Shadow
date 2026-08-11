@@ -3,6 +3,7 @@
 Simulates multiple devices syncing data through a shared Git repository.
 Tests: master node, soft deletes, settings sync, conflict resolution.
 """
+
 from __future__ import annotations
 
 import json
@@ -12,15 +13,17 @@ import sqlite3
 import tempfile
 import unittest
 from datetime import datetime
-from unittest.mock import MagicMock, patch
 
 # Ensure project root is in path
 sys_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if sys_path not in os.path.sys.path:
     import sys
+
     sys.path.insert(0, sys_path)
 
-from core_sys import DatabaseManager, ConfigManager
+import contextlib
+
+from core_sys import ConfigManager, DatabaseManager
 
 
 class MockSyncManager:
@@ -56,21 +59,15 @@ class MockSyncManager:
             try:
                 db.c.execute(f"SELECT * FROM {table}")
                 columns = [desc[0] for desc in db.c.description]
-                data["tables"][table] = [
-                    dict(zip(columns, row, strict=False)) for row in db.c.fetchall()
-                ]
+                data["tables"][table] = [dict(zip(columns, row, strict=False)) for row in db.c.fetchall()]
             except Exception:
                 pass
 
         # Export deletions
         for table in tables:
             try:
-                db.c.execute(
-                    "SELECT uuid, deleted_at FROM deleted_uuids WHERE table_name=?", (table,)
-                )
-                data["deletions"][table] = [
-                    {"uuid": r[0], "deleted_at": r[1]} for r in db.c.fetchall()
-                ]
+                db.c.execute("SELECT uuid, deleted_at FROM deleted_uuids WHERE table_name=?", (table,))
+                data["deletions"][table] = [{"uuid": r[0], "deleted_at": r[1]} for r in db.c.fetchall()]
             except Exception:
                 pass
 
@@ -95,7 +92,7 @@ class MockSyncManager:
             if filename.endswith(".json"):
                 device_id = filename.replace(".json", "")
                 filepath = os.path.join(sync_dir, filename)
-                with open(filepath, "r", encoding="utf-8") as f:
+                with open(filepath, encoding="utf-8") as f:
                     devices[device_id] = json.load(f)
         return devices
 
@@ -103,7 +100,7 @@ class MockSyncManager:
         """Get the current master node ID."""
         cluster_file = os.path.join(self.shared_dir, "cluster_state.json")
         if os.path.exists(cluster_file):
-            with open(cluster_file, "r") as f:
+            with open(cluster_file) as f:
                 return json.load(f).get("master_id")
         return None
 
@@ -111,9 +108,7 @@ class MockSyncManager:
         """Set the master node."""
         cluster_file = os.path.join(self.shared_dir, "cluster_state.json")
         with open(cluster_file, "w") as f:
-            json.dump(
-                {"master_id": master_id, "timestamp": datetime.now().isoformat()}, f
-            )
+            json.dump({"master_id": master_id, "timestamp": datetime.now().isoformat()}, f)
 
     def merge_into_local(
         self,
@@ -144,14 +139,10 @@ class MockSyncManager:
                     uid = del_item["uuid"]
                     del_time = del_item["deleted_at"]
                     if has_modified:
-                        db.c.execute(
-                            f"SELECT modified_at FROM {table} WHERE uuid = ?", (uid,)
-                        )
+                        db.c.execute(f"SELECT modified_at FROM {table} WHERE uuid = ?", (uid,))
                         row = db.c.fetchone()
                         if row and (not row[0] or del_time > row[0]):
-                            db.c.execute(
-                                f"DELETE FROM {table} WHERE uuid = ?", (uid,)
-                            )
+                            db.c.execute(f"DELETE FROM {table} WHERE uuid = ?", (uid,))
                             db.c.execute(
                                 "DELETE FROM deleted_uuids WHERE table_name=? AND uuid=?",
                                 (table, uid),
@@ -202,9 +193,7 @@ class MockSyncManager:
                         existing = db.c.fetchone()
                     else:
                         # Just check if record exists
-                        db.c.execute(
-                            f"SELECT uuid FROM {table} WHERE uuid = ?", (uid,)
-                        )
+                        db.c.execute(f"SELECT uuid FROM {table} WHERE uuid = ?", (uid,))
                         existing = db.c.fetchone()
                         if existing:
                             existing = tuple([None] * len(select_cols)) if select_cols else (None,)
@@ -213,13 +202,11 @@ class MockSyncManager:
                         row.pop("id", None)
                         cols = ", ".join(row.keys())
                         placeholders = ", ".join(["?"] * len(row))
-                        try:
+                        with contextlib.suppress(sqlite3.IntegrityError):
                             db.c.execute(
                                 f"INSERT INTO {table} ({cols}) VALUES ({placeholders})",
                                 list(row.values()),
                             )
-                        except sqlite3.IntegrityError:
-                            pass
                     else:
                         # Parse existing values
                         idx = 0
@@ -230,9 +217,7 @@ class MockSyncManager:
                         incoming_mod = row.get("modified_at", "")
                         remote_is_master = dev_id == master_id
 
-                        update_cols = [
-                            k for k in row.keys() if k not in ["id", "uuid"]
-                        ]
+                        update_cols = [k for k in row if k not in ["id", "uuid"]]
                         set_clause = ", ".join([f"{k}=?" for k in update_cols])
 
                         if has_id:
@@ -242,31 +227,17 @@ class MockSyncManager:
                             values = [row[k] for k in update_cols] + [uid]
                             where_clause = "uuid=?"
 
-                        if remote_is_master:
-                            try:
+                        if remote_is_master or (incoming_mod and (not existing_mod or incoming_mod > existing_mod)):
+                            with contextlib.suppress(sqlite3.IntegrityError):
                                 db.c.execute(
                                     f"UPDATE {table} SET {set_clause} WHERE {where_clause}",
                                     values,
                                 )
-                            except sqlite3.IntegrityError:
-                                pass
-                        elif incoming_mod and (
-                            not existing_mod or incoming_mod > existing_mod
-                        ):
-                            try:
-                                db.c.execute(
-                                    f"UPDATE {table} SET {set_clause} WHERE {where_clause}",
-                                    values,
-                                )
-                            except sqlite3.IntegrityError:
-                                pass
 
         db.safe_commit()
 
     def _get_all_tables(self, db: DatabaseManager) -> list:
-        db.c.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT IN ('sqlite_sequence')"
-        )
+        db.c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT IN ('sqlite_sequence')")
         return [r[0] for r in db.c.fetchall()]
 
 
@@ -413,7 +384,7 @@ class TestMultiMachineSync(unittest.TestCase):
         sync_a.save_export(sync_a.export_local_data(db_a, config_a))
 
         # Device B syncs
-        db_b, config_b, sync_b = self._create_device("device_B")
+        _db_b, config_b, sync_b = self._create_device("device_B")
         devices = sync_b.get_all_device_data()
 
         # Apply settings from Device A
@@ -462,7 +433,7 @@ class TestMultiMachineSync(unittest.TestCase):
 
     def test_shared_folder_sync(self):
         """Test that shared folders are correctly mapped."""
-        db, config, sync = self._create_device("device_A")
+        _db, _config, _sync = self._create_device("device_A")
 
         # Create a shared folder with files
         shared_folder = os.path.join(self.shared_dir, "shared_docs")
@@ -521,4 +492,5 @@ if __name__ == "__main__":
     result = runner.run(suite)
 
     import sys
+
     sys.exit(0 if result.wasSuccessful() else 1)
