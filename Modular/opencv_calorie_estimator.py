@@ -62,9 +62,13 @@ _FOOD_PROFILE: dict[str, tuple[float, float, NutritionInfo]] = {
     "unknown": (0.85, 2.0, NutritionInfo(150, 8.0, 6.0, 15.0)),
 }
 
-# Persian keyword maps for lookups against the ingredients table
+# Persian keyword maps for lookups against the ingredients table.
+# Composite dishes (stew, soup) are checked before vegetables, since names
+# like "قورمه سبزی" contain vegetable keywords but are stews.
 _PERSIAN_KEYWORDS: dict[str, list[str]] = {
     "rice": ["برنج", "چلو", "کته"],
+    "stew": ["خورشت", "خورش", "قورمه", "قیمه", "فسنجان"],
+    "soup": ["سوپ", "آش"],
     "pasta": ["ماکارونی", "پاستا"],
     "bread": ["نان", "بربری", "سنگک", "تافتون"],
     "meat": ["گوشت", "کباب", "جوجه", "مرغ"],
@@ -78,8 +82,6 @@ _PERSIAN_KEYWORDS: dict[str, list[str]] = {
     "potato": ["سیب زمینی", "سیب‌زمینی"],
     "cheese": ["پنیر"],
     "yogurt": ["ماست"],
-    "stew": ["خورشت", "خورش", "قورمه", "قیمه", "فسنجان"],
-    "soup": ["سوپ", "آش"],
     "mixed": ["مخلوط"],
 }
 

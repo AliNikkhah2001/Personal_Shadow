@@ -63,8 +63,8 @@ class CalorieSessionTracker:
                 for name, stat in self._stats.items()
                 if self._seen[name] >= self.min_confirmations
             }
-            total_kcal = sum(stat.total_kcal for stat in confirmed.values())
-            total_weight = sum(stat.total_weight for stat in confirmed.values())
+            total_kcal = sum(stat.total_kcal / stat.count for stat in confirmed.values())
+            total_weight = sum(stat.total_weight / stat.count for stat in confirmed.values())
             foods = [
                 {
                     "food_type": name,

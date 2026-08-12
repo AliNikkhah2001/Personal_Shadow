@@ -3,13 +3,14 @@
             const [foodCameraActive, setFoodCameraActive] = useState(false);
             const [foodAnnotatedImage, setFoodAnnotatedImage] = useState("");
             const [foodScanError, setFoodScanError] = useState("");
+            const [foodSession, setFoodSession] = useState(null);
 
             useEffect(() => {
                 if (!foodCameraActive || !backend) return;
 
                 let cancelled = false;
                 const scan = () => {
-                    backend.request(JSON.stringify({action: 'detect_food', use_vision_feed: true})).then(res => {
+                    backend.request(JSON.stringify({action: 'detect_food', use_vision_feed: true, include_summary: true})).then(res => {
                         if (cancelled) return;
                         const data = JSON.parse(res);
                         if (data.error) {
@@ -18,6 +19,9 @@
                         }
                         setFoodScanError("");
                         setFoodDetections(data.detections || []);
+                        if (data.session) {
+                            setFoodSession(data.session);
+                        }
                         if (data.annotated_image) {
                             setFoodAnnotatedImage(`data:image/jpeg;base64,${data.annotated_image}`);
                         }
@@ -31,6 +35,13 @@
                     clearInterval(intervalId);
                 };
             }, [foodCameraActive, backend]);
+
+            const resetSession = () => {
+                if (!backend) return;
+                backend.request(JSON.stringify({action: 'reset_food_session'})).then(() => {
+                    setFoodSession(null);
+                });
+            };
 
             if (!active) return null;
 
@@ -63,6 +74,18 @@
                         
                         <div className="glass-panel p-4 flex flex-col gap-3">
                             <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest border-b border-white/10 pb-1">Detected Foods</h3>
+                            {foodSession && foodSession.foods && foodSession.foods.length > 0 && (
+                                <div className="flex items-center justify-between bg-green-950/40 border border-green-500/30 rounded-md px-3 py-2">
+                                    <div className="flex flex-col">
+                                        <span className="text-[10px] text-gray-400 uppercase tracking-widest">Session Total</span>
+                                        <span className="font-mono font-bold text-green-400 text-lg">{Math.round(foodSession.total_kcal)} kcal</span>
+                                    </div>
+                                    <div className="flex flex-col items-end gap-0.5">
+                                        <span className="text-[10px] text-gray-400">{foodSession.foods.length} confirmed food{foodSession.foods.length !== 1 ? 's' : ''} • {foodSession.scans_total} scans</span>
+                                        <button onClick={resetSession} className="text-[10px] text-red-400 hover:text-red-300 uppercase tracking-widest">Reset</button>
+                                    </div>
+                                </div>
+                            )}
                             {foodDetections.length === 0 ? (
                                 <div className="text-center text-gray-500 py-8 text-xs">No food detected yet</div>
                             ) : (
@@ -76,9 +99,17 @@
                                             <div className="flex gap-4 text-[10px] text-gray-400">
                                                 <span><i className="fas fa-fire mr-1"></i> ~{det.estimated_calories} kcal</span>
                                                 <span><i className="fas fa-weight mr-1"></i> ~{det.estimated_weight_grams}g</span>
+                                                {det.pixels_per_cm ? <span><i className="fas fa-ruler mr-1"></i> {det.pixels_per_cm} px/cm</span> : null}
                                             </div>
+                                            {det.estimated_macros && (
+                                                <div className="flex gap-3 text-[10px] font-mono">
+                                                    <span className="text-orange-400">P {Math.round(det.estimated_macros.protein || 0)}g</span>
+                                                    <span className="text-red-400">F {Math.round(det.estimated_macros.fat || 0)}g</span>
+                                                    <span className="text-blue-400">C {Math.round(det.estimated_macros.carbs || 0)}g</span>
+                                                </div>
+                                            )}
                                             <div className="flex gap-2">
-                                                <button onClick={() => { logEntry('food', {name: det.food_type, amount_grams: det.estimated_weight_grams || 100, kcal: det.estimated_calories, protein: 0}); }} className="glass-button px-3 py-1.5 rounded text-[10px] font-bold text-green-300 uppercase border border-green-500/30 bg-green-900/30 hover:bg-green-600 hover:text-white text-xs">Log Meal</button>
+                                                <button onClick={() => { logEntry('food', {name: det.food_type, amount_grams: det.estimated_weight_grams || 100, kcal: det.estimated_kcal || det.estimated_calories, protein: (det.estimated_macros || {}).protein || 0}); }} className="glass-button px-3 py-1.5 rounded text-[10px] font-bold text-green-300 uppercase border border-green-500/30 bg-green-900/30 hover:bg-green-600 hover:text-white text-xs">Log Meal</button>
                                             </div>
                                         </div>
                                     ))}
