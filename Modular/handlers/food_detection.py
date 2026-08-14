@@ -120,6 +120,7 @@ class FoodDetectionHandler(ActionHandler):
         return {
             "bbox": list(d.bbox),
             "food_type": d.name,
+            "food_name": d.food_name or d.name,
             "confidence": round(d.confidence, 3),
             "estimated_calories": int(d.estimated_kcal),
             "estimated_kcal": d.estimated_kcal,

@@ -28,6 +28,7 @@ class FoodDetection:
     volume_cm3: float = 0.0
     pixels_per_cm: float = 0.0
     area_pixels: int = 0
+    food_name: str = ""
 
 
 @dataclass
@@ -97,6 +98,28 @@ class FoodCalorieEstimator:
         "standard_plate": (26.0, 26.0),
     }
 
+    # Canonical display names per detected food class
+    DEFAULT_FOOD_NAMES: ClassVar[dict[str, str]] = {
+        "rice": "Rice",
+        "pasta": "Pasta",
+        "bread": "Bread",
+        "meat": "Meat",
+        "chicken": "Chicken",
+        "fish": "Fish",
+        "egg": "Egg",
+        "vegetable": "Vegetable",
+        "salad": "Salad",
+        "fruit": "Fruit",
+        "tomato": "Tomato",
+        "potato": "Potato",
+        "cheese": "Cheese",
+        "yogurt": "Yogurt",
+        "stew": "Stew",
+        "soup": "Soup",
+        "mixed": "Mixed Food",
+        "unknown": "Unknown",
+    }
+
     FOOD_DENSITIES: ClassVar[dict[str, float]] = {k: v[0] for k, v in _FOOD_PROFILE.items()}
 
     _HEIGHTS_CM: ClassVar[dict[str, float]] = {k: v[1] for k, v in _FOOD_PROFILE.items()}
@@ -113,11 +136,18 @@ class FoodCalorieEstimator:
         ((0, 0, 180), (180, 35, 255)),  # white foods
     ]
 
-    def __init__(self, nutrition_db: dict[str, NutritionInfo] | None = None):
+    def __init__(self, nutrition_db: dict[str, NutritionInfo] | None = None, food_names: dict[str, str] | None = None):
         self.nutrition_db: dict[str, NutritionInfo] = nutrition_db or dict(self.DEFAULT_NUTRITION)
+        self.food_names: dict[str, str] = dict(self.DEFAULT_FOOD_NAMES)
+        if food_names:
+            self.food_names.update(food_names)
         self.detector: Any = None
         self.segmenter: Any = None
         self.default_pixels_per_cm = 8.0
+
+    def resolve_food_name(self, name: str) -> str:
+        """Map a detected class to a concrete food name (incl. DB-sourced)."""
+        return self.food_names.get(name, name)
 
     # ------------------------------------------------------------------ models
 
@@ -158,7 +188,7 @@ class FoodCalorieEstimator:
 
         for cnt in sorted(contours, key=cv2.contourArea, reverse=True)[:12]:
             area = cv2.contourArea(cnt)
-            if area < img_area * 0.02:
+            if area < img_area * 0.002:  # smaller than a coin at close range
                 continue
 
             # A plate is a light-colored, roughly circular boundary, not a
@@ -197,6 +227,23 @@ class FoodCalorieEstimator:
                     ppcm = (d1 + d2) / 2 / self.REFERENCE_OBJECTS["standard_plate"][0]
                     if 3.0 < ppcm < 60.0:
                         return (ppcm, "standard_plate")
+
+            # Coin detection (small, bright, near-circular contour) for close-ups
+            if is_plate_like and 5 <= len(cnt) <= 200:
+                ellipse = cv2.fitEllipse(cnt)
+                (_cx, _cy), (d1, d2), _ = ellipse
+                if d1 < 12 or d2 < 12:
+                    continue
+                aspect = max(d1, d2) / min(d1, d2)
+                if 1.0 <= aspect < 1.35 and 0.08 < max(d1, d2) / image.shape[1] < 0.45:
+                    mean_d = (d1 + d2) / 2
+                    for coin_name, (cd, _ch) in (
+                        ("coin_eu_2euro", self.REFERENCE_OBJECTS["coin_eu_2euro"]),
+                        ("coin_us_quarter", self.REFERENCE_OBJECTS["coin_us_quarter"]),
+                    ):
+                        ppcm = mean_d / cd
+                        if 3.0 < ppcm < 80.0:
+                            return (ppcm, coin_name)
 
         if best is not None:
             return best
@@ -321,6 +368,7 @@ class FoodCalorieEstimator:
                     volume_cm3=round(volume_cm3, 1),
                     pixels_per_cm=round(pixels_per_cm, 2),
                     area_pixels=int(np.count_nonzero(mask)),
+                    food_name=self.resolve_food_name(name),
                 )
             )
 
@@ -349,9 +397,15 @@ class FoodCalorieEstimator:
         for det in detections:
             x, y, w, h = det.bbox
             cv2.rectangle(output, (x, y), (x + w, y + h), (0, 255, 0), 3)
-            label = f"{det.name}: ~{det.estimated_kcal:.0f} kcal ({det.estimated_weight_grams:.0f}g)"
-            text_y = y - 10 if y > 20 else y + h + 20
-            cv2.putText(output, label, (x + 5, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+            label = f"{det.food_name or det.name}: ~{det.estimated_kcal:.0f} kcal ({det.estimated_weight_grams:.0f}g)"
+            sub = f"vol {det.volume_cm3:.0f} cm3 | {det.confidence:.0%}"
+            text_y = y - 10 if y > 44 else y + h + 44
+            bar_y1, bar_y2 = text_y - 26, text_y + 24
+            bar_x1, bar_x2 = x + 3, x + 3 + max(200, len(label) * 9)
+            bar = output[bar_y1:bar_y2, bar_x1:bar_x2]
+            output[bar_y1:bar_y2, bar_x1:bar_x2] = (bar * 0.35).astype(np.uint8)
+            cv2.putText(output, label, (x + 8, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+            cv2.putText(output, sub, (x + 8, text_y + 16), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (200, 255, 200), 1)
         return output
 
 
@@ -371,10 +425,12 @@ def _avg_matching_rows(
 
 def build_nutrition_db_from_rows(
     rows: list[tuple[str, float, float, float, float]],
-) -> dict[str, NutritionInfo]:
+) -> tuple[dict[str, NutritionInfo], dict[str, str]]:
     """Map ingredient rows (name, kcal, protein, fat, carbs) to food classes.
 
     Matches Persian ingredient names against per-class keyword lists.
+    Returns (nutrition_db, food_names), where food_names maps each class to
+    the most representative ingredient name found.
     """
     by_class: dict[str, list[tuple[str, float, float, float, float]]] = {}
     for row in rows:
@@ -385,11 +441,13 @@ def build_nutrition_db_from_rows(
                 break
 
     nutrition_db: dict[str, NutritionInfo] = {}
+    food_names: dict[str, str] = {}
     for food_class, class_rows in by_class.items():
         info = _avg_matching_rows(class_rows)
         if info is not None:
             nutrition_db[food_class] = info
-    return nutrition_db
+            food_names[food_class] = class_rows[0][0]
+    return nutrition_db, food_names
 
 
 def create_estimator_from_db(db_connection) -> FoodCalorieEstimator:
@@ -400,5 +458,5 @@ def create_estimator_from_db(db_connection) -> FoodCalorieEstimator:
         rows = cursor.fetchall()
     except Exception:
         rows = []
-    nutrition_db = build_nutrition_db_from_rows(rows)
-    return FoodCalorieEstimator(nutrition_db or None)
+    nutrition_db, food_names = build_nutrition_db_from_rows(rows)
+    return FoodCalorieEstimator(nutrition_db or None, food_names)

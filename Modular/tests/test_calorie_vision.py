@@ -77,13 +77,15 @@ def test_nutrition_db_seeding_from_persian_rows():
         ("قورمه سبزی", 145.0, 8.5, 9.0, 7.5),
         ("ماست کیر", 60.0, 3.5, 3.3, 4.0),
     ]
-    db_rows = build_nutrition_db_from_rows(rows)
+    db_rows, food_names = build_nutrition_db_from_rows(rows)
     assert "rice" in db_rows
     assert abs(db_rows["rice"].kcal - 130.0) < 1e-6
     assert "stew" in db_rows
     assert "yogurt" in db_rows
-    est = FoodCalorieEstimator(db_rows)
+    assert food_names["rice"] == "برنج پخته (چلو)"
+    est = FoodCalorieEstimator(db_rows, food_names)
     assert est.nutrition_for("rice").kcal == 130.0
+    assert est.resolve_food_name("rice") == "برنج پخته (چلو)"
 
 
 def test_create_estimator_from_db(tmp_path):
