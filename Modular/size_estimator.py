@@ -18,6 +18,7 @@ try:
     TORCH_AVAILABLE = importlib.util.find_spec('torch') is not None
     if TORCH_AVAILABLE:
         import torch
+        import torch.nn.functional
         from torchvision import transforms
     else:
         torch = None  # type: ignore
@@ -192,7 +193,7 @@ class SizeEstimator:
             prediction = self.midas(input_tensor)
 
             # Resize back to original size
-            prediction = F.interpolate(
+            prediction = torch.nn.functional.interpolate(
                 prediction.unsqueeze(1),
                 size=(h, w),
                 mode="bicubic",
