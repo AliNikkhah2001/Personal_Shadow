@@ -8,6 +8,7 @@ Pure OpenCV/NumPy implementation with hooks for ML model integration.
 
 from __future__ import annotations
 
+import contextlib
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
@@ -126,14 +127,23 @@ class FoodCalorieEstimator:
 
     DEFAULT_NUTRITION: ClassVar[dict[str, NutritionInfo]] = {k: v[2] for k, v in _FOOD_PROFILE.items()}
 
-    # HSV ranges used for food segmentation
+    # HSV ranges used for food segmentation - TIGHTENED to exclude skin tones
+    # Skin tones typically: H 0-20, S 20-150, V 50-255
+    # We exclude low-saturation warm colors that match skin
     _FOOD_HSV_RANGES: ClassVar[list[tuple[tuple[int, int, int], tuple[int, int, int]]]] = [
-        ((10, 50, 50), (25, 255, 200)),  # brown / cooked meats
-        ((35, 50, 50), (85, 255, 255)),  # green vegetables
-        ((0, 50, 50), (15, 255, 255)),  # red / orange
-        ((160, 50, 50), (180, 255, 255)),  # purple-red
-        ((15, 50, 50), (35, 255, 255)),  # yellow
-        ((0, 0, 180), (180, 35, 255)),  # white foods
+        ((10, 100, 50), (25, 255, 200)),   # brown / cooked meats - higher saturation
+        ((35, 80, 50), (85, 255, 255)),    # green vegetables
+        ((0, 120, 50), (15, 255, 255)),    # red / orange - higher saturation
+        ((160, 120, 50), (180, 255, 255)), # purple-red
+        ((15, 100, 50), (35, 255, 255)),   # yellow - higher saturation
+        ((0, 0, 220), (180, 25, 255)),     # white foods - higher value threshold
+    ]
+
+    # Explicit skin-tone exclusion ranges (will be subtracted from food mask)
+    _SKIN_HSV_RANGES: ClassVar[list[tuple[tuple[int, int, int], tuple[int, int, int]]]] = [
+        ((0, 15, 40), (30, 160, 255)),     # typical skin tones
+        ((0, 10, 80), (35, 100, 255)),     # lighter skin tones
+        ((0, 5, 150), (20, 60, 255)),      # very pale skin
     ]
 
     def __init__(self, nutrition_db: dict[str, NutritionInfo] | None = None, food_names: dict[str, str] | None = None):
@@ -144,6 +154,16 @@ class FoodCalorieEstimator:
         self.detector: Any = None
         self.segmenter: Any = None
         self.default_pixels_per_cm = 8.0
+
+        # Load face detector for exclusion
+        self._face_cascade = None
+        with contextlib.suppress(Exception):
+            self._face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_alt2.xml")
+
+        # Load eye cascade for additional face confirmation
+        self._eye_cascade = None
+        with contextlib.suppress(Exception):
+            self._eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_eye.xml")
 
     def resolve_food_name(self, name: str) -> str:
         """Map a detected class to a concrete food name (incl. DB-sourced)."""
@@ -251,13 +271,175 @@ class FoodCalorieEstimator:
 
     # ------------------------------------------------------------ segmentation
 
+    def _get_face_mask(self, image: np.ndarray) -> np.ndarray:
+        """Create a mask of face regions to exclude from food detection."""
+        face_mask = np.zeros(image.shape[:2], dtype=np.uint8)
+        if self._face_cascade is None:
+            return face_mask
+
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        faces = self._face_cascade.detectMultiScale(gray, 1.1, 5, minSize=(60, 60))
+
+        for (x, y, w, h) in faces:
+            # Expand face region slightly to cover hair/neck
+            pad = int(max(w, h) * 0.3)
+            x1 = max(0, x - pad)
+            y1 = max(0, y - pad)
+            x2 = min(image.shape[1], x + w + pad)
+            y2 = min(image.shape[0], y + h + pad)
+            cv2.rectangle(face_mask, (x1, y1), (x2, y2), 255, -1)
+
+        return face_mask
+
+    def _get_reference_object_mask(self, image: np.ndarray) -> np.ndarray:
+        """Create a mask of reference objects (card, plate, coin) to exclude from food detection."""
+        ref_mask = np.zeros(image.shape[:2], dtype=np.uint8)
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+        edges = cv2.Canny(blurred, 50, 150)
+        contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        img_area = image.shape[0] * image.shape[1]
+        card_w_cm, card_h_cm = self.REFERENCE_OBJECTS["credit_card"]
+
+        for cnt in contours:
+            area = cv2.contourArea(cnt)
+            if area < img_area * 0.002:
+                continue
+
+            peri = cv2.arcLength(cnt, True)
+            approx = cv2.approxPolyDP(cnt, 0.02 * peri, True)
+
+            # Credit card: quadrilateral with correct aspect ratio AND light color
+            if len(approx) == 4:
+                _x, _y, w, h = cv2.boundingRect(cnt)
+                if w < 10 or h < 10:
+                    continue
+                aspect = w / h if w > h else h / w
+                ratio_error = abs(aspect - card_w_cm / card_h_cm) / (card_w_cm / card_h_cm)
+                if ratio_error < 0.35:
+                    # Credit cards are typically light-colored (white/cream)
+                    mask = np.zeros(image.shape[:2], dtype=np.uint8)
+                    cv2.drawContours(mask, [cnt], -1, 255, -1)
+                    mean_val = float(cv2.mean(cv2.cvtColor(image, cv2.COLOR_BGR2GRAY), mask=mask)[0])
+                    if mean_val > 180:  # Card must be bright
+                        cv2.drawContours(ref_mask, [cnt], -1, 255, -1)
+                    continue
+
+            # Plate: large bright ellipse
+            if len(cnt) >= 5:
+                ellipse = cv2.fitEllipse(cnt)
+                (_cx, _cy), (d1, d2), _ = ellipse
+                if d1 < 20 or d2 < 20:
+                    continue
+                # Check brightness
+                mask = np.zeros(image.shape[:2], dtype=np.uint8)
+                cv2.drawContours(mask, [cnt], -1, 255, -1)
+                mean_val = float(cv2.mean(cv2.cvtColor(image, cv2.COLOR_BGR2GRAY), mask=mask)[0])
+                if mean_val > 170 and 0.8 < d1 / d2 < 1.25 and d1 > image.shape[0] * 0.25:
+                    cv2.drawContours(ref_mask, [cnt], -1, 255, -1)
+                    continue
+
+            # Coin: small bright circle
+            if len(cnt) >= 5 and len(cnt) <= 200:
+                ellipse = cv2.fitEllipse(cnt)
+                (_cx, _cy), (d1, d2), _ = ellipse
+                if d1 < 12 or d2 < 12:
+                    continue
+                aspect = max(d1, d2) / min(d1, d2)
+                if 1.0 <= aspect < 1.35 and 0.08 < max(d1, d2) / image.shape[1] < 0.45:
+                    mask = np.zeros(image.shape[:2], dtype=np.uint8)
+                    cv2.drawContours(mask, [cnt], -1, 255, -1)
+                    mean_val = float(cv2.mean(cv2.cvtColor(image, cv2.COLOR_BGR2GRAY), mask=mask)[0])
+                    if mean_val > 170:
+                        cv2.drawContours(ref_mask, [cnt], -1, 255, -1)
+
+        return ref_mask
+
+    def _compute_texture_score(self, image: np.ndarray, mask: np.ndarray) -> float:
+        """Compute texture score - food typically has more texture than skin/paintings."""
+        if mask is None or np.count_nonzero(mask) < 100:
+            return 0.0
+
+        # Use Laplacian variance as texture measure
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        masked_gray = cv2.bitwise_and(gray, gray, mask=mask)
+
+        # Compute Laplacian on masked region
+        laplacian = cv2.Laplacian(masked_gray, cv2.CV_64F)
+        # Only compute variance on masked pixels
+        mask_bool = mask > 0
+        if not np.any(mask_bool):
+            return 0.0
+        texture_var = np.var(laplacian[mask_bool])
+
+        # Normalize: food typically has variance > 100, skin ~50-100, flat paintings < 50
+        return min(1.0, texture_var / 500.0)
+
+    def _compute_color_variance(self, image: np.ndarray, mask: np.ndarray) -> float:
+        """Compute color variance in HSV - food typically has more color variation."""
+        if mask is None or np.count_nonzero(mask) < 100:
+            return 0.0
+
+        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+        # Compute hue variance in masked region
+        mask_bool = mask > 0
+        if not np.any(mask_bool):
+            return 0.0
+        hue_vals = hsv[mask_bool, 0].astype(float)
+        # Handle hue circularity
+        hue_var = np.var(hue_vals)
+        sat_var = np.var(hsv[mask_bool, 1].astype(float))
+
+        # Food typically has more color variation
+        return min(1.0, (hue_var + sat_var) / 5000.0)
+
+    def _compute_uniformity_penalty(self, image: np.ndarray, mask: np.ndarray) -> float:
+        """Compute penalty for uniform color regions (penalty 0-1, higher = more uniform = less food-like)."""
+        if mask is None or np.count_nonzero(mask) < 100:
+            return 1.0
+
+        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+        mask_bool = mask > 0
+        if not np.any(mask_bool):
+            return 1.0
+
+        # Check saturation uniformity - skin/paintings often have uniform saturation
+        sat_vals = hsv[mask_bool, 1].astype(float)
+        sat_std = np.std(sat_vals)
+
+        # Check value uniformity
+        val_vals = hsv[mask_bool, 2].astype(float)
+        val_std = np.std(val_vals)
+
+        # Low std = uniform = likely not food
+        uniformity = 1.0 - min(1.0, (sat_std + val_std) / 80.0)
+        return uniformity
+
     def segment_food(self, image: np.ndarray) -> list[tuple[np.ndarray, tuple[int, int, int, int]]]:
-        """Segment food blobs -> list of (mask, bbox)."""
+        """Segment food blobs -> list of (mask, bbox). Excludes faces and skin tones."""
         hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
         combined = np.zeros(image.shape[:2], dtype=np.uint8)
         for lower, upper in self._FOOD_HSV_RANGES:
             mask = cv2.inRange(hsv, np.array(lower), np.array(upper))
             combined = cv2.bitwise_or(combined, mask)
+
+        # Subtract skin tones
+        skin_mask = np.zeros(image.shape[:2], dtype=np.uint8)
+        for lower, upper in self._SKIN_HSV_RANGES:
+            mask = cv2.inRange(hsv, np.array(lower), np.array(upper))
+            skin_mask = cv2.bitwise_or(skin_mask, mask)
+
+        # Subtract face regions
+        face_mask = self._get_face_mask(image)
+        exclusion_mask = cv2.bitwise_or(skin_mask, face_mask)
+
+        # Also exclude reference objects (card, plate, coin) from food detection
+        ref_mask = self._get_reference_object_mask(image)
+        exclusion_mask = cv2.bitwise_or(exclusion_mask, ref_mask)
+
+        # Remove excluded regions from food mask
+        combined = cv2.bitwise_and(combined, cv2.bitwise_not(exclusion_mask))
 
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
         combined = cv2.morphologyEx(combined, cv2.MORPH_CLOSE, kernel)
@@ -267,21 +449,40 @@ class FoodCalorieEstimator:
         min_area = max(2000, image.shape[0] * image.shape[1] * 0.005)
         max_area = image.shape[0] * image.shape[1] * 0.5
 
-        results: list[tuple[np.ndarray, tuple[int, int, int, int]]] = []
+        results: list[tuple[np.ndarray, tuple[int, int, int, int], float]] = []
         for cnt in contours:
             area = cv2.contourArea(cnt)
             if not (min_area < area < max_area):
                 continue
-            x, y, w, h = cv2.boundingRect(cnt)
+            _x, _y, w, h = cv2.boundingRect(cnt)
             aspect = w / h if h > 0 else 1.0
             if area <= 0 or not (0.2 < aspect < 5.0):
                 continue
+
+            # Create mask for this contour
             mask = np.zeros(image.shape[:2], dtype=np.uint8)
             cv2.drawContours(mask, [cnt], -1, 255, -1)
-            results.append((mask, (int(x), int(y), int(w), int(h))))
 
-        results.sort(key=lambda item: np.count_nonzero(item[0]), reverse=True)
-        return results[:10]
+            # Compute food-likeness score
+            texture_score = self._compute_texture_score(image, mask)
+            color_score = self._compute_color_variance(image, mask)
+            uniformity_penalty = self._compute_uniformity_penalty(image, mask)
+            food_score = (texture_score * 0.5 + color_score * 0.3 + (1.0 - uniformity_penalty) * 0.2)
+
+            # Reject if region overlaps significantly with skin-tone regions
+            skin_overlap = np.count_nonzero(cv2.bitwise_and(mask, skin_mask)) / np.count_nonzero(mask)
+            if skin_overlap > 0.3:
+                continue
+
+            # Only keep regions that look like food (threshold adjustable)
+            if food_score < 0.3:
+                continue
+
+            results.append((mask, (int(_x), int(_y), int(w), int(h)), food_score))
+
+        # Sort by food score first, then by area
+        results.sort(key=lambda item: (item[2], np.count_nonzero(item[0])), reverse=True)
+        return [(mask, bbox) for mask, bbox, _ in results[:10]]
 
     # ------------------------------------------------------------ classification
 
