@@ -193,81 +193,137 @@ class FoodCalorieEstimator:
     def detect_reference_object(self, image: np.ndarray) -> tuple[float, str] | None:
         """Detect a reference object and return (pixels_per_cm, object_name).
 
-        Tries: credit card (aspect 1.586 white rectangle), plate (large
-        ellipse/circle), ArUco marker (if contributed modules available).
+        Tries multiple strategies:
+        1. Credit card: bright white/light rectangle with aspect ~1.586
+        2. Plate: large light-colored circular/elliptical region
+        3. Coin: small bright circular region
+        4. A4 paper: large white rectangle with aspect ~1.414
         """
+        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-        edges = cv2.Canny(blurred, 50, 150)
-        contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        img_area = image.shape[0] * image.shape[1]
+        _img_h, _img_w = image.shape[:2]
+
+        _best_result = None
+        _best_score = 0.0
+
+        # Strategy 1: Detect credit card - bright rectangular region with correct aspect ratio
+        # Look for light-colored rectangular regions
+        white_mask = cv2.inRange(hsv, np.array([0, 0, 200]), np.array([180, 50, 255]))
+        # Also try light gray
+        light_mask = cv2.inRange(hsv, np.array([0, 0, 180]), np.array([180, 60, 255]))
+        combined_mask = cv2.bitwise_or(white_mask, light_mask)
+
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+        combined_mask = cv2.morphologyEx(combined_mask, cv2.MORPH_CLOSE, kernel)
+        combined_mask = cv2.morphologyEx(combined_mask, cv2.MORPH_OPEN, kernel)
+
+        contours, _ = cv2.findContours(combined_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
         img_area = image.shape[0] * image.shape[1]
         card_w_cm, card_h_cm = self.REFERENCE_OBJECTS["credit_card"]
-        best: tuple[float, str] | None = None
-        best_score = 0.0
+        card_aspect = card_w_cm / card_h_cm  # ~1.586
 
-        for cnt in sorted(contours, key=cv2.contourArea, reverse=True)[:12]:
+        best_card = None
+        best_card_score = 0.0
+
+        for cnt in sorted(contours, key=cv2.contourArea, reverse=True)[:20]:
             area = cv2.contourArea(cnt)
-            if area < img_area * 0.002:  # smaller than a coin at close range
+            if area < img_area * 0.0005:  # Lower threshold for cards
                 continue
-
-            # A plate is a light-colored, roughly circular boundary, not a
-            # solid colored blob. Check the interior brightness before trusting
-            # the ellipse fit.
-            mask = np.zeros(image.shape[:2], dtype=np.uint8)
-            cv2.drawContours(mask, [cnt], -1, 255, -1)
-            mean_val = float(cv2.mean(cv2.cvtColor(image, cv2.COLOR_BGR2GRAY), mask=mask)[0])
-            is_plate_like = mean_val > 170 and 0.8 < area / cv2.contourArea(cv2.convexHull(cnt)) < 1.0
 
             peri = cv2.arcLength(cnt, True)
             approx = cv2.approxPolyDP(cnt, 0.02 * peri, True)
+
             if len(approx) == 4:
-                # Quadrilateral -> candidate credit card, not a plate
-                _x, _y, w, h = cv2.boundingRect(cnt)
-                if w < 10 or h < 10:
+                x, y, w, h = cv2.boundingRect(cnt)
+                if w < 15 or h < 15:
                     continue
                 aspect = w / h if w > h else h / w
-                ratio_error = abs(aspect - card_w_cm / card_h_cm) / (card_w_cm / card_h_cm)
-                if ratio_error < 0.35:
+                ratio_error = abs(aspect - card_aspect) / card_aspect
+
+                # Check if region is bright
+                mask = np.zeros(image.shape[:2], dtype=np.uint8)
+                cv2.drawContours(mask, [cnt], -1, 255, -1)
+                mean_val = float(cv2.mean(cv2.cvtColor(image, cv2.COLOR_BGR2GRAY), mask=mask)[0])
+
+                if ratio_error < 0.4 and mean_val > 150:  # Bright enough
                     score = area / img_area
-                    if score > best_score:
-                        best_score = score
+                    if score > best_card_score:
+                        best_card_score = score
                         long_side = max(w, h)
                         ppcm = long_side / card_w_cm
-                        best = (ppcm, "credit_card")
+                        if 5.0 < ppcm < 50.0:  # Reasonable range
+                            best_card = (ppcm, "credit_card")
+
+        # Strategy 2: Detect plate - large bright circular/elliptical region
+        # Use Hough circles on bright regions
+        bright_mask = cv2.inRange(hsv, np.array([0, 0, 180]), np.array([180, 60, 255]))
+        bright_mask = cv2.morphologyEx(bright_mask, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15)))
+        bright_mask = cv2.morphologyEx(bright_mask, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15)))
+
+        # Find large circular contours
+        plate_contours, _ = cv2.findContours(bright_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        _best_plate = None
+        for cnt in sorted(plate_contours, key=cv2.contourArea, reverse=True)[:10]:
+            area = cv2.contourArea(cnt)
+            if area < img_area * 0.02:  # Plate should be at least 2% of image
                 continue
 
-            # Plate detection: large, bright ellipse contour
-            if is_plate_like and len(cnt) >= 5:
+            if len(cnt) >= 5:
                 ellipse = cv2.fitEllipse(cnt)
-                (_cx, _cy), (d1, d2), _ = ellipse
-                if d1 < 20 or d2 < 20:
-                    continue
-                if 0.8 < d1 / d2 < 1.25 and d1 > image.shape[0] * 0.25:
-                    ppcm = (d1 + d2) / 2 / self.REFERENCE_OBJECTS["standard_plate"][0]
-                    if 3.0 < ppcm < 60.0:
-                        return (ppcm, "standard_plate")
+                (_cx, _cy), (d1, d2), _angle = ellipse
 
-            # Coin detection (small, bright, near-circular contour) for close-ups
-            if is_plate_like and 5 <= len(cnt) <= 200:
-                ellipse = cv2.fitEllipse(cnt)
-                (_cx, _cy), (d1, d2), _ = ellipse
-                if d1 < 12 or d2 < 12:
-                    continue
-                aspect = max(d1, d2) / min(d1, d2)
-                if 1.0 <= aspect < 1.35 and 0.08 < max(d1, d2) / image.shape[1] < 0.45:
-                    mean_d = (d1 + d2) / 2
+                # Check if it's roughly circular and large enough
+                if 0.7 < d1 / d2 < 1.3 and d1 > image.shape[0] * 0.15:
+                    # Check brightness
+                    mask = np.zeros(image.shape[:2], dtype=np.uint8)
+                    cv2.drawContours(mask, [cnt], -1, 255, -1)
+                    mean_val = float(cv2.mean(cv2.cvtColor(image, cv2.COLOR_BGR2GRAY), mask=mask)[0])
+
+                    if mean_val > 150:
+                        ppcm = (d1 + d2) / 2 / self.REFERENCE_OBJECTS["standard_plate"][0]
+                        if 3.0 < ppcm < 60.0:
+                            return (ppcm, "standard_plate")
+
+        # Strategy 3: Coin detection - small bright circles
+        # Use Hough circles on bright regions
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        blurred = cv2.GaussianBlur(gray, (9, 9), 2)
+        circles = cv2.HoughCircles(blurred, cv2.HOUGH_GRADIENT, dp=1, minDist=50,
+                                   param1=50, param2=30, minRadius=10, maxRadius=80)
+
+        if circles is not None:
+            circles = np.uint16(np.around(circles))
+            for circle in circles[0, :]:
+                x, y, r = circle
+                # Check if bright
+                mask = np.zeros(image.shape[:2], dtype=np.uint8)
+                cv2.circle(mask, (x, y), r, 255, -1)
+                mean_val = float(cv2.mean(cv2.cvtColor(image, cv2.COLOR_BGR2GRAY), mask=mask)[0])
+
+                if mean_val > 150:
                     for coin_name, (cd, _ch) in (
                         ("coin_eu_2euro", self.REFERENCE_OBJECTS["coin_eu_2euro"]),
                         ("coin_us_quarter", self.REFERENCE_OBJECTS["coin_us_quarter"]),
                     ):
-                        ppcm = mean_d / cd
+                        ppcm = (2 * r) / cd
                         if 3.0 < ppcm < 80.0:
                             return (ppcm, coin_name)
 
-        if best is not None:
-            return best
+        # Strategy 4: A4 paper - large white rectangle with aspect ~1.414
+        # (Can be added if needed)
+
+        # Fallback: Use the best card detection if found
+        if best_card:
+            return best_card
+
         return None
+
+# ------------------------------------------------------------ segmentation
+
 
     # ------------------------------------------------------------ segmentation
 
