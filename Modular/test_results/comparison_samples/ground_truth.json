@@ -1,0 +1,72 @@
+{
+  "test_card_only.jpg": {
+    "food_class": "rice",
+    "bbox": [
+      260,
+      200,
+      120,
+      76
+    ],
+    "weight_grams": 75,
+    "kcal": 120,
+    "reference_object": "credit_card",
+    "pixels_per_cm": 14.37,
+    "description": "Credit card reference only (scale calibration)"
+  },
+  "test_card_rice.jpg": {
+    "food_class": "rice",
+    "bbox": [
+      270,
+      240,
+      180,
+      120
+    ],
+    "weight_grams": 100,
+    "kcal": 130,
+    "reference_object": "credit_card",
+    "pixels_per_cm": 14.37,
+    "description": "Credit card + yellow rice blob"
+  },
+  "test_coin_only.jpg": {
+    "food_class": "potato",
+    "bbox": [
+      292,
+      212,
+      56,
+      56
+    ],
+    "weight_grams": 50,
+    "kcal": 40,
+    "reference_object": "coin_eu_2euro",
+    "pixels_per_cm": 21.73,
+    "description": "EU 2\u20ac coin reference only"
+  },
+  "test_plate_card_veg.jpg": {
+    "food_class": "vegetable",
+    "bbox": [
+      240,
+      180,
+      160,
+      120
+    ],
+    "weight_grams": 120,
+    "kcal": 30,
+    "reference_object": "standard_plate",
+    "pixels_per_cm": 11.55,
+    "description": "White plate + credit card + green vegetable blob"
+  },
+  "test_plate_coin_meat.jpg": {
+    "food_class": "meat",
+    "bbox": [
+      250,
+      190,
+      140,
+      100
+    ],
+    "weight_grams": 150,
+    "kcal": 375,
+    "reference_object": "standard_plate",
+    "pixels_per_cm": 11.89,
+    "description": "White plate + EU 2\u20ac coin + red meat blob"
+  }
+}
