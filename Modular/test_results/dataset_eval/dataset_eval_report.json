@@ -1,0 +1,49 @@
+{
+  "summary": {
+    "total_images": 5,
+    "detected": 5,
+    "detection_rate": 1.0,
+    "classification_accuracy": 0.4
+  },
+  "calorie_estimation": {
+    "mean_relative_error": 25.518909743589738,
+    "median_relative_error": 0.9882666666666667,
+    "mape": 2551.890974358974
+  },
+  "weight_estimation": {
+    "mean_relative_error": 6.653066666666666,
+    "median_relative_error": 5.455333333333333
+  },
+  "reference_object": {
+    "detected": 4,
+    "total": 5,
+    "detection_rate": 0.8,
+    "mean_ppcm_error": 0.10633263743910923
+  },
+  "per_class": {
+    "rice": {
+      "total": 2,
+      "correct": 1,
+      "accuracy": 0.5,
+      "mean_kcal_error": 8.213557692307692
+    },
+    "vegetable": {
+      "total": 1,
+      "correct": 0,
+      "accuracy": 0.0,
+      "mean_kcal_error": 109.36666666666666
+    },
+    "potato": {
+      "total": 1,
+      "correct": 1,
+      "accuracy": 1.0,
+      "mean_kcal_error": 0.8125
+    },
+    "meat": {
+      "total": 1,
+      "correct": 0,
+      "accuracy": 0.0,
+      "mean_kcal_error": 0.9882666666666667
+    }
+  }
+}

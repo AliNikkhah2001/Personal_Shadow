@@ -1,0 +1,8 @@
+metric,value
+total_images,5
+detected,5
+detection_rate,1.000
+classification_accuracy,0.400
+calorie_mape,2551.89%
+weight_mape,665.31%
+ref_detection_rate,0.800
