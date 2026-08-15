@@ -15,3 +15,28 @@
         .transform-style-3d { transform-style: preserve-3d; }
         .backface-hidden { backface-visibility: hidden; }
         .rotate-y-180 { transform: rotateY(180deg); }
+        .md-preview h1 { font-size: 1.8em; font-weight: 700; color: #f1f5f9; margin: 1.2em 0 0.5em; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.3em; }
+        .md-preview h2 { font-size: 1.4em; font-weight: 700; color: #e2e8f0; margin: 1em 0 0.4em; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 0.2em; }
+        .md-preview h3 { font-size: 1.15em; font-weight: 600; color: #cbd5e1; margin: 0.8em 0 0.3em; }
+        .md-preview h4, .md-preview h5, .md-preview h6 { font-weight: 600; color: #94a3b8; margin: 0.6em 0 0.2em; }
+        .md-preview p { margin: 0.6em 0; line-height: 1.8; color: #cbd5e1; }
+        .md-preview a { color: #60a5fa; text-decoration: none; }
+        .md-preview a:hover { text-decoration: underline; }
+        .md-preview ul, .md-preview ol { padding-left: 1.5em; margin: 0.5em 0; }
+        .md-preview li { margin: 0.2em 0; line-height: 1.7; color: #cbd5e1; }
+        .md-preview ul { list-style-type: disc; }
+        .md-preview ol { list-style-type: decimal; }
+        .md-preview blockquote { border-left: 4px solid #3b82f6; padding: 0.5em 1em; margin: 0.8em 0; background: rgba(59,130,246,0.08); border-radius: 0 6px 6px 0; color: #94a3b8; }
+        .md-preview code { background: rgba(255,255,255,0.08); padding: 0.15em 0.4em; border-radius: 4px; font-family: 'Fira Code', 'Consolas', monospace; font-size: 0.88em; color: #f472b6; }
+        .md-preview pre { background: #0d1117; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 1em; margin: 0.8em 0; overflow-x: auto; }
+        .md-preview pre code { background: none; padding: 0; color: #e2e8f0; font-size: 0.85em; }
+        .md-preview table { border-collapse: collapse; width: 100%; margin: 0.8em 0; }
+        .md-preview th, .md-preview td { border: 1px solid rgba(255,255,255,0.1); padding: 0.5em 0.75em; text-align: left; }
+        .md-preview th { background: rgba(255,255,255,0.05); font-weight: 600; color: #e2e8f0; }
+        .md-preview td { color: #cbd5e1; }
+        .md-preview img { max-width: 100%; border-radius: 8px; margin: 0.5em 0; }
+        .md-preview hr { border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 1.5em 0; }
+        .md-preview mark { background: rgba(250,204,21,0.3); padding: 0 3px; border-radius: 2px; color: #fef08a; }
+        .md-preview strong { color: #f1f5f9; font-weight: 700; }
+        .md-preview em { color: #94a3b8; }
+        .drag-over { outline: 2px dashed #3b82f6; outline-offset: -2px; background: rgba(59,130,246,0.05) !important; }

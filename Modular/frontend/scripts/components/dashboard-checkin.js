@@ -111,8 +111,8 @@
                     ) : null}
                     
                     {showModal && (
-                        <div className="absolute inset-0 bg-black/90 z-50 flex items-center justify-center p-4 backdrop-blur-md">
-                            <div className="w-full max-w-lg flex flex-col gap-4 glass-panel p-6 border border-purple-500/30 shadow-[0_0_20px_rgba(168,85,247,0.2)]">
+                        <div className="fixed inset-0 bg-black/90 z-[200] flex items-center justify-center p-4 backdrop-blur-md" style={{position:'fixed', top:0, left:0, right:0, bottom:0}}>
+                            <div className="w-full max-w-lg flex flex-col gap-4 glass-panel p-6 border border-purple-500/30 shadow-[0_0_20px_rgba(168,85,247,0.2)] max-h-[90vh] overflow-y-auto">
                                 <h3 className="text-white font-bold text-lg">Daily Check-in</h3>
                                 
                                 <div className="flex flex-col gap-3">

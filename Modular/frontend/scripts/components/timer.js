@@ -417,7 +417,7 @@ const ProductivityHubView = ({ backend, timerState, flatGoals, queue, refreshQue
                                     </div>
                                     <div className="w-full md:w-1/2 flex flex-col">
                                         <div className="bg-black/60 px-3 py-2 border-b border-white/10 rounded-t text-xs font-bold text-gray-400 tracking-widest uppercase">Live Preview</div>
-                                        <div className="flex-grow bg-black/30 border border-white/10 rounded-b p-4 overflow-y-auto text-gray-200 prose prose-invert max-w-none text-sm custom-scrollbar" dangerouslySetInnerHTML={{__html: marked.parse(sessionNote || "*Preview will appear here*")}}></div>
+                                        <div className="flex-grow bg-black/30 border border-white/10 rounded-b p-4 overflow-y-auto text-gray-200 md-preview max-w-none text-sm custom-scrollbar" dangerouslySetInnerHTML={{__html: marked.parse(sessionNote || "*Preview will appear here*")}}></div>
                                     </div>
                                 </div>
                                 

@@ -56,7 +56,13 @@ const NotesView = ({ notes, backend, refreshNotes, flatGoals, courseColors }) =>
 
     const renderMarkdown = (text) => {
         if (typeof marked !== 'undefined' && marked.parse) {
-            try { return marked.parse(text || ""); } catch(e) { return text || ""; }
+            try {
+                const html = marked.parse(text || "");
+                return html;
+            } catch(e) {
+                console.error('marked.parse error:', e);
+                return (text || "").replace(/\n/g, '<br>');
+            }
         }
         return (text || "").replace(/\n/g, '<br>');
     };
@@ -214,7 +220,7 @@ hr{border:none;border-top:1px solid #ddd;margin:2rem 0;}
                                     <button onClick={() => exportFile('pdf')} className="text-[10px] bg-red-600/50 hover:bg-red-600 px-2 py-1 rounded transition uppercase tracking-wider text-white border border-red-500/50">PDF</button>
                                 </div>
                             </div>
-                            <div className="w-full flex-grow p-6 overflow-y-auto text-gray-200 prose prose-invert max-w-none custom-scrollbar leading-relaxed" dangerouslySetInnerHTML={{__html: renderMarkdown(content)}}></div>
+                            <div className="w-full flex-grow p-6 overflow-y-auto text-gray-200 md-preview max-w-none custom-scrollbar leading-relaxed" dangerouslySetInnerHTML={{__html: renderMarkdown(content)}}></div>
                         </div>
                     )}
                 </div>

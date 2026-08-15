@@ -168,13 +168,7 @@ class DashboardActionsMixin:
                         "global_study_hours": global_study_hours,
                         "global_target_hours": global_target_hours,
                     },
-                    "studied_hours": {
-                        r[0]: (r[1] or 0) / 60.0
-                        for r in db.c.execute(
-                            "SELECT course, sum(actual_duration) FROM pomodoro_sessions WHERE type='Work' AND date(timestamp)=?",
-                            (today_str,),
-                        ).fetchall()
-                    },
+                    "studied_hours": self.get_studied_hours_per_goal(date_filter=today_str),
                 }
             )
         except Exception as e:
@@ -204,11 +198,7 @@ class DashboardActionsMixin:
                 for r in db.c.fetchall()
             ]
 
-            db.c.execute(
-                "SELECT course, sum(actual_duration) FROM pomodoro_sessions WHERE type='Work' AND timestamp LIKE ?",
-                (today_str + "%",),
-            )
-            studied = {r[0]: (r[1] or 0) / 60.0 for r in db.c.fetchall()}
+            studied = self.get_studied_hours_per_goal(date_filter=today_str)
 
             return json.dumps({"today_sessions": today_sessions, "studied_hours": studied})
         except Exception:

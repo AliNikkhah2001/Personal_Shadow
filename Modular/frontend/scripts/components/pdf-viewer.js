@@ -250,7 +250,7 @@
                                                 <span className={a.subject === 'Highlight' ? 'text-yellow-400' : a.subject === 'Underline' ? 'text-blue-400' : 'text-green-400'}><i className={`fas fa-${a.subject === 'Note' ? 'comment' : 'marker'} mr-1`}></i> {a.subject}</span>
                                                 <span className="opacity-70 truncate max-w-[80px]" title={a.title}>{a.title}</span>
                                             </div>
-                                            <div className="text-gray-200 text-xs leading-relaxed custom-scrollbar overflow-x-hidden prose prose-invert max-w-none" dangerouslySetInnerHTML={{__html: marked.parse(a.content || "")}}></div>
+                                            <div className="text-gray-200 text-xs leading-relaxed custom-scrollbar overflow-x-hidden md-preview max-w-none" dangerouslySetInnerHTML={{__html: marked.parse(a.content || "")}}></div>
                                         </div>
                                     ))
                                 }
@@ -297,7 +297,7 @@
                                     {!notePreview ? (
                                         <textarea ref={noteTextareaRef} className="w-full h-full bg-transparent text-gray-200 p-6 outline-none resize-none font-mono text-sm leading-relaxed custom-scrollbar" value={noteContent} onChange={e=>setNoteContent(e.target.value)} placeholder="Type sophisticated markdown note here... it will be permanently bound to this PDF region!" autoFocus></textarea>
                                     ) : (
-                                        <div className="w-full h-full p-6 overflow-y-auto text-gray-200 prose prose-invert max-w-none custom-scrollbar" dangerouslySetInnerHTML={{__html: marked.parse(noteContent || "*Nothing to preview.*")}}></div>
+                                        <div className="w-full h-full p-6 overflow-y-auto text-gray-200 md-preview max-w-none custom-scrollbar" dangerouslySetInnerHTML={{__html: marked.parse(noteContent || "*Nothing to preview.*")}}></div>
                                     )}
                                 </div>
 

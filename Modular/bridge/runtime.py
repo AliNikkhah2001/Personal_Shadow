@@ -262,7 +262,59 @@ class RuntimeServicesMixin:
         except Exception:
             return []
 
-    def get_heatmap_data(self):
+    def get_studied_hours_per_goal(self, date_filter=None):
+        try:
+            db.c.execute("SELECT id, parent_id, title FROM cascading_goals")
+            all_goals = db.c.fetchall()
+            if not all_goals:
+                return {}
+
+            children_map = {}
+            goal_titles = set()
+            for gid, pid, title in all_goals:
+                goal_titles.add(title)
+                if pid not in children_map:
+                    children_map[pid] = []
+                children_map[pid].append(title)
+
+            if date_filter:
+                db.c.execute(
+                    "SELECT course, sum(actual_duration) FROM pomodoro_sessions WHERE type='Work' AND date(timestamp)=?",
+                    (date_filter,),
+                )
+            else:
+                db.c.execute(
+                    "SELECT course, sum(actual_duration) FROM pomodoro_sessions WHERE type='Work'"
+                )
+            course_hours = {r[0]: (r[1] or 0) / 60.0 for r in db.c.fetchall()}
+
+            def get_descendant_titles(parent_id):
+                titles = []
+                for child_title in children_map.get(parent_id, []):
+                    titles.append(child_title)
+                    child_id = None
+                    for gid, pid, title in all_goals:
+                        if title == child_title:
+                            child_id = gid
+                            break
+                    if child_id:
+                        titles.extend(get_descendant_titles(child_id))
+                return titles
+
+            result = {}
+            for gid, pid, title in all_goals:
+                total = course_hours.get(title, 0)
+                for desc_title in get_descendant_titles(gid):
+                    total += course_hours.get(desc_title, 0)
+                result[title] = total
+
+            for course_name, hours in course_hours.items():
+                if course_name not in result:
+                    result[course_name] = hours
+
+            return result
+        except Exception:
+            return {}
         weeks = 28
         matrix = [[0] * 7 for _ in range(weeks)]
         td = datetime.now().date()

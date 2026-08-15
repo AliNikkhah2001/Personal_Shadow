@@ -97,7 +97,6 @@
                         {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((day, i) => (<div key={day} className={`text-center text-[10px] font-bold uppercase ${(i===0||i===6)?'text-red-400':'text-gray-400'}`}>{day}</div>))}
                     </div>
                     <div className="calendar-grid flex-grow overflow-y-auto pr-1">{renderDays()}</div>
-
                     {showModal && (
                         <div className="absolute inset-0 bg-black/90 z-50 flex items-center justify-center rounded-xl p-4 backdrop-blur-md">
                             <div className="w-full max-w-sm flex flex-col gap-3">
@@ -171,20 +170,8 @@
             );
         };
 
-        const DashboardArchitectureWidget = ({ goals, studiedHours, courseColors, flatGoals }) => {
-            const findLoggedHours = (goalTitle) => {
-                if (!studiedHours || typeof studiedHours !== 'object') return 0;
-                if (studiedHours[goalTitle] !== undefined) return studiedHours[goalTitle];
-                const lc = goalTitle.toLowerCase().trim();
-                for (const [key, val] of Object.entries(studiedHours)) {
-                    if (key.toLowerCase().trim() === lc) return val;
-                }
-                if (flatGoals) {
-                    const match = flatGoals.find(fg => fg.split(' > ').pop().toLowerCase().trim() === lc);
-                    if (match && studiedHours[match] !== undefined) return studiedHours[match];
-                }
-                return 0;
-            };
+        const DashboardArchitectureWidget = ({ goals, studiedHours, courseColors }) => {
+            const getHours = (title) => studiedHours && studiedHours[title] ? studiedHours[title] : 0;
             const sortedGoals = goals ? [...goals].filter(g => g.deadline).sort((a,b) => new Date(a.deadline) - new Date(b.deadline)) : [];
             const now = new Date();
             const upcomingGoals = sortedGoals.filter(g => new Date(g.deadline) >= now);
@@ -196,18 +183,14 @@
                     ) : (
                         upcomingGoals.slice(0, 5).map(g => {
                             const daysUntil = Math.ceil((new Date(g.deadline) - now) / (1000 * 60 * 60 * 24));
-                            const logged = findLoggedHours(g.title);
-                            const rem = Math.max(0, (g.target_hours || 0) - logged);
+                            const logged = getHours(g.title);
                             const rootColor = (courseColors && courseColors[g.title]) ? courseColors[g.title] : '#3b82f6';
                             const pct = g.target_hours > 0 ? Math.min(100, Math.round((logged / g.target_hours) * 100)) : 0;
-
                             return (
                                 <div key={g.id} className="flex flex-col p-3 bg-white/5 rounded border border-white/5 hover:bg-white/10 transition mb-2" style={{ borderLeft: `3px solid ${rootColor}` }}>
                                     <div className="flex justify-between items-center mb-1">
                                         <span className="text-xs font-bold text-gray-200" style={{ color: rootColor }}>{g.title}</span>
-                                        <div className="flex items-center gap-2">
-                                            <span className={`text-[10px] font-bold ${daysUntil <= 1 ? 'text-red-400' : 'text-yellow-400'}`}>{daysUntil <= 0 ? 'Today!' : `${daysUntil}d left`}</span>
-                                        </div>
+                                        <span className={`text-[10px] font-bold ${daysUntil <= 1 ? 'text-red-400' : 'text-yellow-400'}`}>{daysUntil <= 0 ? 'Today!' : `${daysUntil}d left`}</span>
                                     </div>
                                     {g.target_hours > 0 && (
                                         <div className="flex flex-col gap-1 mt-1">
@@ -228,21 +211,9 @@
             );
         };
 
-        const GoalProgressWidget = ({ goals, studiedHours, courseColors, flatGoals }) => {
+        const GoalProgressWidget = ({ goals, studiedHours, courseColors }) => {
             const chartRef = useRef(null);
-            const findLoggedHours = (goalTitle) => {
-                if (!studiedHours || typeof studiedHours !== 'object') return 0;
-                if (studiedHours[goalTitle] !== undefined) return studiedHours[goalTitle];
-                const lc = goalTitle.toLowerCase().trim();
-                for (const [key, val] of Object.entries(studiedHours)) {
-                    if (key.toLowerCase().trim() === lc) return val;
-                }
-                if (flatGoals) {
-                    const match = flatGoals.find(fg => fg.split(' > ').pop().toLowerCase().trim() === lc);
-                    if (match && studiedHours[match] !== undefined) return studiedHours[match];
-                }
-                return 0;
-            };
+            const getHours = (title) => studiedHours && studiedHours[title] ? studiedHours[title] : 0;
             useEffect(() => {
                 if (!chartRef.current || !window.Chart || !goals || goals.length === 0) return;
                 const ctx = chartRef.current.getContext('2d');
@@ -250,11 +221,8 @@
                 if (goalData.length === 0) return;
                 const labels = goalData.map(g => g.title.length > 15 ? g.title.substring(0, 15) + '...' : g.title);
                 const targetData = goalData.map(g => g.target_hours);
-                const actualData = goalData.map(g => Math.min(findLoggedHours(g.title), g.target_hours));
-                const pctData = goalData.map(g => {
-                    const logged = findLoggedHours(g.title);
-                    return g.target_hours > 0 ? Math.round((logged / g.target_hours) * 100) : 0;
-                });
+                const actualData = goalData.map(g => Math.min(getHours(g.title), g.target_hours));
+                const pctData = goalData.map(g => g.target_hours > 0 ? Math.round((getHours(g.title) / g.target_hours) * 100) : 0);
                 const colors = goalData.map(g => (courseColors && courseColors[g.title]) ? courseColors[g.title] : '#3b82f6');
                 let chartInstance = new window.Chart(ctx, {
                     type: 'bar',
@@ -279,7 +247,6 @@
                 });
                 return () => chartInstance.destroy();
             }, [goals, studiedHours, courseColors]);
-
             return (
                 <div className="p-4 h-full flex flex-col w-full">
                     <h3 className="text-gray-300 font-bold uppercase tracking-widest text-sm border-b border-white/10 pb-2 mb-4">Goal Progress Overview</h3>
@@ -288,10 +255,9 @@
             );
         };
 
-        const GoalTimeChartWidget = ({ backend, goals, studiedHours, flatGoals }) => {
+        const GoalTimeChartWidget = ({ backend, goals, studiedHours }) => {
             const chartRef = useRef(null);
             const [timeData, setTimeData] = useState(null);
-
             useEffect(() => {
                 if (!backend) return;
                 backend.request(JSON.stringify({action: 'get_history_data'})).then(res => {
@@ -299,7 +265,6 @@
                     setTimeData(data.history_sessions || []);
                 });
             }, [backend]);
-
             useEffect(() => {
                 if (!chartRef.current || !window.Chart || !timeData || !goals) return;
                 const ctx = chartRef.current.getContext('2d');
@@ -321,16 +286,10 @@
                         data: dailyMins,
                         borderColor: colors[idx % colors.length],
                         backgroundColor: colors[idx % colors.length] + '33',
-                        tension: 0.3,
-                        fill: false,
-                        pointRadius: 4,
-                        pointHoverRadius: 6
+                        tension: 0.3, fill: false, pointRadius: 4, pointHoverRadius: 6
                     };
                 });
-                const dayLabels = last7.map(d => {
-                    const date = new Date(d + 'T12:00:00');
-                    return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-                });
+                const dayLabels = last7.map(d => new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }));
                 let chartInstance = new window.Chart(ctx, {
                     type: 'line',
                     data: { labels: dayLabels, datasets },
@@ -340,15 +299,11 @@
                             y: { title: { display: true, text: 'Hours', color: 'gray', font: {size: 10} }, ticks: { color: 'gray', font: {size: 9} }, grid: {color: 'rgba(255,255,255,0.05)'} },
                             x: { ticks: { color: 'gray', font: {size: 9} }, grid: {display: false} }
                         },
-                        plugins: {
-                            legend: { labels: { color: 'white', boxWidth: 12, font: {size: 10} } },
-                            tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(1)}h` } }
-                        }
+                        plugins: { legend: { labels: { color: 'white', boxWidth: 12, font: {size: 10} } }, tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(1)}h` } } }
                     }
                 });
                 return () => chartInstance.destroy();
             }, [timeData, goals]);
-
             return (
                 <div className="p-4 h-full flex flex-col w-full">
                     <h3 className="text-gray-300 font-bold uppercase tracking-widest text-sm border-b border-white/10 pb-2 mb-4">Time Worked Per Goal (Last 7 Days)</h3>
@@ -407,7 +362,6 @@
         const CorrelationChartsWidget = ({ backend, correlations, insights }) => {
             const chartRef = useRef(null);
             const [error, setError] = useState(null);
-
             useEffect(() => {
                 if (!chartRef.current || !window.Chart || !correlations) return;
                 try {
@@ -429,9 +383,7 @@
                     return () => chartInstance.destroy();
                 } catch (e) { setError(e.message); }
             }, [correlations]);
-
             if (error) return <div className="p-4 h-full flex flex-col w-full"><h3 className="text-gray-300 font-bold uppercase tracking-widest text-sm border-b border-white/10 pb-2 mb-4">Behavioral Correlations</h3><div className="flex-grow flex items-center justify-center text-red-400 text-sm">Chart unavailable: {error}</div></div>;
-
             return (
                 <div className="p-4 h-full flex flex-col w-full">
                     <h3 className="text-gray-300 font-bold uppercase tracking-widest text-sm border-b border-white/10 pb-2 mb-4">Behavioral Correlations</h3>
@@ -487,7 +439,6 @@
         };
 
         const StudyStreakWidget = ({ todaySessions, metrics }) => {
-            const currentHour = new Date().getHours();
             const now = new Date();
             const totalMins = todaySessions ? todaySessions.reduce((s, sess) => s + (sess.actual_duration || sess.duration || 0), 0) : 0;
             const totalHours = totalMins / 60;
@@ -495,15 +446,6 @@
             const isProductive = totalHours >= 4;
             const sessionsGoal = Math.max(4, sessionsToday + 2);
             const progressPct = Math.min(100, Math.round((sessionsToday / sessionsGoal) * 100));
-            const hourlyRates = todaySessions && todaySessions.length > 0 ? (() => {
-                const buckets = Array(12).fill(0);
-                todaySessions.filter(s => s.type === 'Work').forEach(s => {
-                    const h = new Date(s.timestamp).getHours();
-                    if (h >= 8 && h < 20) buckets[h - 8] += (s.actual_duration || s.duration || 0);
-                });
-                const peakIdx = buckets.indexOf(Math.max(...buckets));
-                return { peak: peakIdx + 8, buckets };
-            })() : { peak: null, buckets: Array(12).fill(0) };
             const motivationQuotes = [
                 "Discipline is the bridge between goals and accomplishment.",
                 "The secret of getting ahead is getting started.",
@@ -526,12 +468,6 @@
                         <div className="bg-black/40 rounded-lg p-3 border border-white/5 flex flex-col items-center">
                             <div className="text-4xl font-black text-white">{totalHours.toFixed(1)}</div>
                             <div className="text-[9px] text-gray-500 uppercase tracking-widest mt-1">Hours Logged</div>
-                            {hourlyRates.peak !== null && (
-                                <div className="mt-2 flex items-center gap-1">
-                                    <i className="fas fa-bolt text-yellow-400 text-[10px]"></i>
-                                    <span className="text-[10px] text-yellow-400 font-bold">Peak: {hourlyRates.peak}:00</span>
-                                </div>
-                            )}
                         </div>
                     </div>
                     <div className="bg-gradient-to-r from-blue-900/30 to-purple-900/30 rounded-lg p-3 border border-blue-500/20">
@@ -542,7 +478,7 @@
             );
         };
 
-        const BestHoursWidget = ({ todaySessions, metrics }) => {
+        const BestHoursWidget = ({ todaySessions }) => {
             const chartRef = useRef(null);
             useEffect(() => {
                 if (!chartRef.current || !window.Chart) return;
@@ -562,10 +498,7 @@
                 });
                 let chartInstance = new window.Chart(ctx, {
                     type: 'bar',
-                    data: {
-                        labels,
-                        datasets: [{ label: 'Minutes', data: buckets.map(b => Math.round(b)), backgroundColor: gradientColors, borderRadius: 4, borderSkipped: false }]
-                    },
+                    data: { labels, datasets: [{ label: 'Minutes', data: buckets.map(b => Math.round(b)), backgroundColor: gradientColors, borderRadius: 4, borderSkipped: false }] },
                     options: {
                         responsive: true, maintainAspectRatio: false,
                         scales: {
@@ -577,23 +510,9 @@
                 });
                 return () => chartInstance.destroy();
             }, [todaySessions]);
-
-            const peakHour = todaySessions && todaySessions.length > 0 ? (() => {
-                const buckets = Array(12).fill(0);
-                todaySessions.filter(s => s.type === 'Work').forEach(s => {
-                    const h = new Date(s.timestamp).getHours();
-                    if (h >= 8 && h < 20) buckets[h - 8] += (s.actual_duration || s.duration || 0);
-                });
-                const maxIdx = buckets.indexOf(Math.max(...buckets));
-                return buckets[maxIdx] > 0 ? `${String(maxIdx + 8).padStart(2, '0')}:00 - ${String(maxIdx + 9).padStart(2, '0')}:00` : 'N/A';
-            })() : 'N/A';
-
             return (
                 <div className="p-4 h-full flex flex-col w-full">
-                    <div className="flex justify-between items-center border-b border-white/10 pb-2 mb-3">
-                        <h3 className="text-gray-300 font-bold uppercase tracking-widest text-sm">Peak Hours</h3>
-                        <span className="text-[10px] text-green-400 font-bold"><i className="fas fa-bolt mr-1"></i>{peakHour}</span>
-                    </div>
+                    <h3 className="text-gray-300 font-bold uppercase tracking-widest text-sm border-b border-white/10 pb-2 mb-3">Peak Hours</h3>
                     <div className="flex-grow relative min-h-[120px]"><canvas ref={chartRef}></canvas></div>
                 </div>
             );
@@ -632,20 +551,9 @@
             );
         };
 
-        const WeeklyGoalBreakdownWidget = ({ backend, goals, studiedHours, flatGoals, courseColors }) => {
+        const WeeklyGoalBreakdownWidget = ({ backend, goals }) => {
             const chartRef = useRef(null);
             const [weekData, setWeekData] = useState(null);
-
-            const findLoggedHours = (goalTitle) => {
-                if (!studiedHours || typeof studiedHours !== 'object') return 0;
-                if (studiedHours[goalTitle] !== undefined) return studiedHours[goalTitle];
-                const lc = goalTitle.toLowerCase().trim();
-                for (const [key, val] of Object.entries(studiedHours)) {
-                    if (key.toLowerCase().trim() === lc) return val;
-                }
-                return 0;
-            };
-
             useEffect(() => {
                 if (!backend) return;
                 backend.request(JSON.stringify({action: 'get_history_data'})).then(res => {
@@ -653,7 +561,6 @@
                     setWeekData(data.history_sessions || []);
                 });
             }, [backend]);
-
             useEffect(() => {
                 if (!chartRef.current || !window.Chart || !weekData || !goals) return;
                 const ctx = chartRef.current.getContext('2d');
@@ -671,15 +578,11 @@
                         const sessions = weekData.filter(s => s.course === g.title && s.timestamp.split('T')[0] === dateStr && s.type === 'Work');
                         return sessions.reduce((sum, s) => sum + (s.actual_duration || s.duration || 0), 0) / 60;
                     });
-                    const totalWeek = dailyMins.reduce((a, b) => a + b, 0);
-                    const target = g.target_hours || 1;
-                    const pct = Math.min(100, Math.round((totalWeek / target) * 7));
                     return {
-                        label: `${g.title.substring(0, 12)}${g.title.length > 12 ? '...' : ''} (${pct}%)`,
+                        label: g.title.substring(0, 12) + (g.title.length > 12 ? '...' : ''),
                         data: dailyMins,
                         backgroundColor: colors[idx] + 'CC',
-                        borderRadius: 3,
-                        borderSkipped: false
+                        borderRadius: 3, borderSkipped: false
                     };
                 });
                 let chartInstance = new window.Chart(ctx, {
@@ -688,15 +591,14 @@
                     options: {
                         responsive: true, maintainAspectRatio: false,
                         scales: {
-                            y: { stacked: false, ticks: { color: 'gray', font: {size: 8}, callback: v => v + 'h' }, grid: {color: 'rgba(255,255,255,0.05)'} },
-                            x: { stacked: false, ticks: { color: 'gray', font: {size: 9} }, grid: {display: false} }
+                            y: { ticks: { color: 'gray', font: {size: 8}, callback: v => v + 'h' }, grid: {color: 'rgba(255,255,255,0.05)'} },
+                            x: { ticks: { color: 'gray', font: {size: 9} }, grid: {display: false} }
                         },
-                        plugins: { legend: { labels: { color: 'white', boxWidth: 10, font: {size: 9} } }, tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label.split(' (')[0]}: ${ctx.raw.toFixed(1)}h` } } }
+                        plugins: { legend: { labels: { color: 'white', boxWidth: 10, font: {size: 9} } } }
                     }
                 });
                 return () => chartInstance.destroy();
-            }, [weekData, goals, studiedHours]);
-
+            }, [weekData, goals]);
             return (
                 <div className="p-4 h-full flex flex-col w-full">
                     <h3 className="text-gray-300 font-bold uppercase tracking-widest text-sm border-b border-white/10 pb-2 mb-3">Weekly Goal Breakdown</h3>
@@ -707,57 +609,81 @@
 
 
         const DashboardView = ({ layout, setLayout, goals, isEditingLayout, setIsEditingLayout, clockFeed, heatmap, habits, habitLogs, metrics, backend, refreshGoals, healthProfile, healthLogs, studiedHours, courseColors, dailyMetrics, setDailyMetrics, correlations, insights, activityLogs, todaySessions, flatGoals, timerState }) => {
-            const SIZE_OPTIONS = ['quarter', 'third', 'half', 'full'];
-            const SIZE_CLASSES = { quarter: 'w-full md:w-1/4', third: 'w-full md:w-1/3', half: 'w-full md:w-1/2', full: 'w-full' };
-            const HEIGHT_OPTIONS = ['auto', 'sm', 'md', 'lg', 'xl'];
-            const HEIGHT_CLASSES = { auto: 'min-h-[200px]', sm: 'min-h-[250px]', md: 'min-h-[320px]', lg: 'min-h-[420px]', xl: 'min-h-[520px]' };
-            const HEIGHT_LABELS = { auto: 'Auto', sm: 'S', md: 'M', lg: 'L', xl: 'XL' };
+            const GRID_COLS = 4;
+            const MIN_COL_PX = 250;
+            const MIN_ROW_PX = 280;
 
-            const dragItem = useRef(null);
-            const dragOverItem = useRef(null);
+            const toggleWidgetVisibility = (id) => setLayout(prev => prev.map(w => w.id === id ? { ...w, visible: !w.visible } : w));
+            const cycleWidgetColSpan = (id) => setLayout(prev => prev.map(w => {
+                if (w.id !== id) return w;
+                const cur = w.colSpan || 1;
+                const next = cur >= GRID_COLS ? 1 : cur + 1;
+                return { ...w, colSpan: next };
+            }));
+            const cycleWidgetRowSpan = (id) => setLayout(prev => prev.map(w => {
+                if (w.id !== id) return w;
+                const cur = w.rowSpan || 1;
+                const next = cur >= 4 ? 1 : cur + 1;
+                return { ...w, rowSpan: next };
+            }));
+
+            const dragState = useRef({ dragging: null, over: null });
 
             const handleDragStart = (e, id) => {
-                dragItem.current = id;
+                dragState.current.dragging = id;
                 e.dataTransfer.effectAllowed = 'move';
-                e.currentTarget.style.opacity = '0.5';
+                e.dataTransfer.setData('text/plain', id);
+                requestAnimationFrame(() => {
+                    const el = document.getElementById(`widget-${id}`);
+                    if (el) el.style.opacity = '0.4';
+                });
             };
 
             const handleDragOver = (e, id) => {
                 e.preventDefault();
                 e.dataTransfer.dropEffect = 'move';
-                dragOverItem.current = id;
+                if (dragState.current.over !== id) {
+                    if (dragState.current.over) {
+                        const prev = document.getElementById(`widget-${dragState.current.over}`);
+                        if (prev) prev.classList.remove('ring-2', 'ring-blue-500', 'ring-offset-2', 'ring-offset-transparent');
+                    }
+                    dragState.current.over = id;
+                    const el = document.getElementById(`widget-${id}`);
+                    if (el) el.classList.add('ring-2', 'ring-blue-500', 'ring-offset-2', 'ring-offset-transparent');
+                }
             };
 
-            const handleDragEnd = (e) => {
-                e.currentTarget.style.opacity = '1';
-                if (!dragItem.current || !dragOverItem.current || dragItem.current === dragOverItem.current) return;
+            const handleDrop = (e, targetId) => {
+                e.preventDefault();
+                const sourceId = dragState.current.dragging;
+                const el = document.getElementById(`widget-${targetId}`);
+                if (el) el.classList.remove('ring-2', 'ring-blue-500', 'ring-offset-2', 'ring-offset-transparent');
+
+                if (!sourceId || sourceId === targetId) return;
+
                 setLayout(prev => {
                     const sorted = [...prev].sort((a, b) => a.order - b.order);
-                    const fromIdx = sorted.findIndex(w => w.id === dragItem.current);
-                    const toIdx = sorted.findIndex(w => w.id === dragOverItem.current);
+                    const fromIdx = sorted.findIndex(w => w.id === sourceId);
+                    const toIdx = sorted.findIndex(w => w.id === targetId);
                     if (fromIdx < 0 || toIdx < 0) return prev;
                     const moved = sorted.splice(fromIdx, 1)[0];
                     sorted.splice(toIdx, 0, moved);
                     return sorted.map((w, i) => ({ ...w, order: i }));
                 });
-                dragItem.current = null;
-                dragOverItem.current = null;
+
+                dragState.current = { dragging: null, over: null };
             };
 
-            const toggleWidgetVisibility = (id) => setLayout(prev => prev.map(w => w.id === id ? { ...w, visible: !w.visible } : w));
-            const cycleWidgetSize = (id) => setLayout(prev => prev.map(w => {
-                if (w.id !== id) return w;
-                const idx = SIZE_OPTIONS.indexOf(w.size);
-                const next = SIZE_OPTIONS[(idx + 1) % SIZE_OPTIONS.length];
-                return { ...w, size: next };
-            }));
-            const cycleWidgetHeight = (id) => setLayout(prev => prev.map(w => {
-                if (w.id !== id) return w;
-                const curH = w.height || 'md';
-                const idx = HEIGHT_OPTIONS.indexOf(curH);
-                const next = HEIGHT_OPTIONS[(idx + 1) % HEIGHT_OPTIONS.length];
-                return { ...w, height: next };
-            }));
+            const handleDragEnd = (e) => {
+                const sourceId = dragState.current.dragging;
+                const el = sourceId ? document.getElementById(`widget-${sourceId}`) : null;
+                if (el) el.style.opacity = '1';
+                if (dragState.current.over) {
+                    const prevEl = document.getElementById(`widget-${dragState.current.over}`);
+                    if (prevEl) prevEl.classList.remove('ring-2', 'ring-blue-500', 'ring-offset-2', 'ring-offset-transparent');
+                }
+                dragState.current = { dragging: null, over: null };
+            };
 
             const renderWidget = (widget) => {
                 switch(widget.type) {
@@ -767,18 +693,18 @@
                     case 'GitHubMatrix': return <NativeGitHubMatrix heatmap={heatmap} />;
                     case 'HabitsWidget': return <DashboardHabitWidget habits={habits} habitLogs={habitLogs} />;
                     case 'MetricsWidget': return <MetricsWidget metrics={metrics} />;
-                    case 'ArchitectureWidget': return <DashboardArchitectureWidget goals={goals} studiedHours={studiedHours} courseColors={courseColors} flatGoals={flatGoals} />;
-                    case 'GoalProgress': return <GoalProgressWidget goals={goals} studiedHours={studiedHours} courseColors={courseColors} flatGoals={flatGoals} />;
-                    case 'GoalTimeChart': return <GoalTimeChartWidget backend={backend} goals={goals} studiedHours={studiedHours} flatGoals={flatGoals} />;
+                    case 'ArchitectureWidget': return <DashboardArchitectureWidget goals={goals} studiedHours={studiedHours} courseColors={courseColors} />;
+                    case 'GoalProgress': return <GoalProgressWidget goals={goals} studiedHours={studiedHours} courseColors={courseColors} />;
+                    case 'GoalTimeChart': return <GoalTimeChartWidget backend={backend} goals={goals} studiedHours={studiedHours} />;
                     case 'DailySummary': return <DailySummaryWidget metrics={metrics} todaySessions={todaySessions} />;
                     case 'RecentActivity': return <RecentActivityWidget activityLogs={activityLogs} />;
                     case 'HealthTrends': return <DashboardHealthWidget healthProfile={healthProfile} healthLogs={healthLogs} />;
                     case 'DailyCheckin': return <DailyCheckinWidget backend={backend} dailyMetrics={dailyMetrics} setDailyMetrics={setDailyMetrics} />;
                     case 'CorrelationCharts': return <CorrelationChartsWidget backend={backend} correlations={correlations} insights={insights} />;
                     case 'StudyStreak': return <StudyStreakWidget todaySessions={todaySessions} metrics={metrics} />;
-                    case 'BestHours': return <BestHoursWidget todaySessions={todaySessions} metrics={metrics} />;
+                    case 'BestHours': return <BestHoursWidget todaySessions={todaySessions} />;
                     case 'PomodoroMini': return <PomodoroMiniWidget timerState={timerState} />;
-                    case 'WeeklyGoalBreakdown': return <WeeklyGoalBreakdownWidget backend={backend} goals={goals} studiedHours={studiedHours} flatGoals={flatGoals} courseColors={courseColors} />;
+                    case 'WeeklyGoalBreakdown': return <WeeklyGoalBreakdownWidget backend={backend} goals={goals} />;
                     default: return null;
                 }
             };
@@ -801,28 +727,46 @@
                             <button onClick={() => setIsEditingLayout(!isEditingLayout)} className={`px-4 py-2 rounded text-xs font-bold transition-all shadow-lg border backdrop-blur-md ${isEditingLayout ? 'bg-blue-600 text-white border-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.6)]' : 'bg-white/5 text-gray-300 border-white/10 hover:bg-white/15'}`}><i className={`fas ${isEditingLayout ? 'fa-check' : 'fa-sliders-h'} mr-2`}></i> {isEditingLayout ? 'Done' : 'Edit Layout'}</button>
                         </div>
                     </div>
-                    <div className="flex flex-wrap -mx-3 items-stretch overflow-y-auto pb-10 flex-grow content-start">
+
+                    <div className="flex-grow overflow-y-auto pb-10 custom-scrollbar"
+                         style={{ display: 'grid', gridTemplateColumns: `repeat(${GRID_COLS}, minmax(${MIN_COL_PX}px, 1fr))`, gridAutoRows: `${MIN_ROW_PX}px`, gap: '1.5rem', alignItems: 'stretch' }}>
                         {sortedLayout.filter(w => isEditingLayout || w.visible).map((widget) => {
-                            const widthClass = SIZE_CLASSES[widget.size] || SIZE_CLASSES.half;
-                            const heightClass = HEIGHT_CLASSES[widget.height || 'md'] || HEIGHT_CLASSES.md;
+                            const colSpan = widget.colSpan || 1;
+                            const rowSpan = widget.rowSpan || 1;
+                            const gridStyle = {
+                                gridColumn: `span ${Math.min(colSpan, GRID_COLS)}`,
+                                gridRow: `span ${rowSpan}`,
+                            };
                             return (
                                 <div key={widget.id}
-                                    className={`${widthClass} px-3 mb-6 transition-all duration-300`}
-                                    draggable={isEditingLayout}
-                                    onDragStart={(e) => handleDragStart(e, widget.id)}
-                                    onDragOver={(e) => handleDragOver(e, widget.id)}
-                                    onDragEnd={handleDragEnd}
+                                     id={`widget-${widget.id}`}
+                                     className={`transition-all duration-200 ${!widget.visible && isEditingLayout ? 'opacity-30 grayscale' : ''}`}
+                                     style={gridStyle}
+                                     draggable={isEditingLayout}
+                                     onDragStart={(e) => handleDragStart(e, widget.id)}
+                                     onDragOver={(e) => handleDragOver(e, widget.id)}
+                                     onDrop={(e) => handleDrop(e, widget.id)}
+                                     onDragEnd={handleDragEnd}
                                 >
-                                    <div className={`glass-panel overflow-hidden h-full flex flex-col relative ${!widget.visible ? 'opacity-30 grayscale' : ''} ${heightClass}`} style={isEditingLayout ? { cursor: 'grab' } : {}}>
+                                    <div className="glass-panel overflow-hidden h-full flex flex-col relative rounded-xl" style={isEditingLayout ? { cursor: 'grab' } : {}}>
                                         {isEditingLayout && (
-                                            <div className="absolute inset-0 bg-black/80 z-50 flex flex-col items-center justify-center backdrop-blur-sm gap-3 rounded-xl border-2 border-blue-500 border-dashed">
-                                                <div className="text-white font-bold text-lg uppercase tracking-widest">{widget.type}</div>
-                                                <div className="flex gap-2 mt-4 flex-wrap justify-center">
-                                                    <button onClick={() => toggleWidgetVisibility(widget.id)} className={`px-3 py-1.5 rounded text-xs font-bold ${widget.visible ? 'bg-green-600' : 'bg-red-600'} text-white`}><i className={`fas fa-${widget.visible ? 'eye' : 'eye-slash'} mr-1`}></i> {widget.visible ? 'Hide' : 'Show'}</button>
-                                                    <button onClick={() => cycleWidgetSize(widget.id)} className="px-3 py-1.5 rounded text-xs font-bold bg-blue-600 text-white"><i className="fas fa-arrows-alt-h mr-1"></i> Width: {widget.size}</button>
-                                                    <button onClick={() => cycleWidgetHeight(widget.id)} className="px-3 py-1.5 rounded text-xs font-bold bg-purple-600 text-white"><i className="fas fa-arrows-alt-v mr-1"></i> Height: {HEIGHT_LABELS[widget.height || 'md']}</button>
-                                                    <div className="flex items-center gap-1 text-white text-[10px]"><i className="fas fa-grip-vertical text-gray-400"></i> Drag to reorder</div>
+                                            <div className="absolute inset-0 bg-black/85 z-50 flex flex-col items-center justify-center backdrop-blur-sm gap-3 rounded-xl border-2 border-blue-500 border-dashed">
+                                                <div className="flex items-center gap-2 text-white font-bold text-sm uppercase tracking-widest">
+                                                    <i className="fas fa-grip-vertical text-blue-400"></i>
+                                                    {widget.type}
                                                 </div>
+                                                <div className="flex gap-2 mt-3 flex-wrap justify-center">
+                                                    <button onClick={() => toggleWidgetVisibility(widget.id)} className={`px-3 py-1.5 rounded text-xs font-bold ${widget.visible ? 'bg-green-600' : 'bg-red-600'} text-white`}>
+                                                        <i className={`fas fa-${widget.visible ? 'eye' : 'eye-slash'} mr-1`}></i> {widget.visible ? 'Show' : 'Hide'}
+                                                    </button>
+                                                    <button onClick={() => cycleWidgetColSpan(widget.id)} className="px-3 py-1.5 rounded text-xs font-bold bg-blue-600 text-white">
+                                                        <i className="fas fa-arrows-alt-h mr-1"></i> Width: {widget.colSpan || 1}x
+                                                    </button>
+                                                    <button onClick={() => cycleWidgetRowSpan(widget.id)} className="px-3 py-1.5 rounded text-xs font-bold bg-purple-600 text-white">
+                                                        <i className="fas fa-arrows-alt-v mr-1"></i> Height: {widget.rowSpan || 1}x
+                                                    </button>
+                                                </div>
+                                                <div className="text-[10px] text-gray-400 mt-1"><i className="fas fa-hand-pointer mr-1"></i> Drag widget to reorder</div>
                                             </div>
                                         )}
                                         {renderWidget(widget)}
