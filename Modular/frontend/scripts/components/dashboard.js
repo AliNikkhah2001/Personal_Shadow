@@ -171,7 +171,20 @@
             );
         };
 
-        const DashboardArchitectureWidget = ({ goals, studiedHours, courseColors }) => {
+        const DashboardArchitectureWidget = ({ goals, studiedHours, courseColors, flatGoals }) => {
+            const findLoggedHours = (goalTitle) => {
+                if (!studiedHours || typeof studiedHours !== 'object') return 0;
+                if (studiedHours[goalTitle] !== undefined) return studiedHours[goalTitle];
+                const lc = goalTitle.toLowerCase().trim();
+                for (const [key, val] of Object.entries(studiedHours)) {
+                    if (key.toLowerCase().trim() === lc) return val;
+                }
+                if (flatGoals) {
+                    const match = flatGoals.find(fg => fg.split(' > ').pop().toLowerCase().trim() === lc);
+                    if (match && studiedHours[match] !== undefined) return studiedHours[match];
+                }
+                return 0;
+            };
             const sortedGoals = goals ? [...goals].filter(g => g.deadline).sort((a,b) => new Date(a.deadline) - new Date(b.deadline)) : [];
             const now = new Date();
             const upcomingGoals = sortedGoals.filter(g => new Date(g.deadline) >= now);
@@ -183,7 +196,7 @@
                     ) : (
                         upcomingGoals.slice(0, 5).map(g => {
                             const daysUntil = Math.ceil((new Date(g.deadline) - now) / (1000 * 60 * 60 * 24));
-                            const logged = studiedHours && studiedHours[g.title] ? studiedHours[g.title] : 0;
+                            const logged = findLoggedHours(g.title);
                             const rem = Math.max(0, (g.target_hours || 0) - logged);
                             const rootColor = (courseColors && courseColors[g.title]) ? courseColors[g.title] : '#3b82f6';
                             const pct = g.target_hours > 0 ? Math.min(100, Math.round((logged / g.target_hours) * 100)) : 0;
@@ -215,8 +228,21 @@
             );
         };
 
-        const GoalProgressWidget = ({ goals, studiedHours, courseColors }) => {
+        const GoalProgressWidget = ({ goals, studiedHours, courseColors, flatGoals }) => {
             const chartRef = useRef(null);
+            const findLoggedHours = (goalTitle) => {
+                if (!studiedHours || typeof studiedHours !== 'object') return 0;
+                if (studiedHours[goalTitle] !== undefined) return studiedHours[goalTitle];
+                const lc = goalTitle.toLowerCase().trim();
+                for (const [key, val] of Object.entries(studiedHours)) {
+                    if (key.toLowerCase().trim() === lc) return val;
+                }
+                if (flatGoals) {
+                    const match = flatGoals.find(fg => fg.split(' > ').pop().toLowerCase().trim() === lc);
+                    if (match && studiedHours[match] !== undefined) return studiedHours[match];
+                }
+                return 0;
+            };
             useEffect(() => {
                 if (!chartRef.current || !window.Chart || !goals || goals.length === 0) return;
                 const ctx = chartRef.current.getContext('2d');
@@ -224,9 +250,9 @@
                 if (goalData.length === 0) return;
                 const labels = goalData.map(g => g.title.length > 15 ? g.title.substring(0, 15) + '...' : g.title);
                 const targetData = goalData.map(g => g.target_hours);
-                const actualData = goalData.map(g => studiedHours && studiedHours[g.title] ? Math.min(studiedHours[g.title], g.target_hours) : 0);
+                const actualData = goalData.map(g => Math.min(findLoggedHours(g.title), g.target_hours));
                 const pctData = goalData.map(g => {
-                    const logged = studiedHours && studiedHours[g.title] ? studiedHours[g.title] : 0;
+                    const logged = findLoggedHours(g.title);
                     return g.target_hours > 0 ? Math.round((logged / g.target_hours) * 100) : 0;
                 });
                 const colors = goalData.map(g => (courseColors && courseColors[g.title]) ? courseColors[g.title] : '#3b82f6');
@@ -262,7 +288,7 @@
             );
         };
 
-        const GoalTimeChartWidget = ({ backend, goals, studiedHours }) => {
+        const GoalTimeChartWidget = ({ backend, goals, studiedHours, flatGoals }) => {
             const chartRef = useRef(null);
             const [timeData, setTimeData] = useState(null);
 
@@ -460,10 +486,263 @@
             );
         };
 
+        const StudyStreakWidget = ({ todaySessions, metrics }) => {
+            const currentHour = new Date().getHours();
+            const now = new Date();
+            const totalMins = todaySessions ? todaySessions.reduce((s, sess) => s + (sess.actual_duration || sess.duration || 0), 0) : 0;
+            const totalHours = totalMins / 60;
+            const sessionsToday = todaySessions ? todaySessions.filter(s => s.type === 'Work').length : 0;
+            const isProductive = totalHours >= 4;
+            const sessionsGoal = Math.max(4, sessionsToday + 2);
+            const progressPct = Math.min(100, Math.round((sessionsToday / sessionsGoal) * 100));
+            const hourlyRates = todaySessions && todaySessions.length > 0 ? (() => {
+                const buckets = Array(12).fill(0);
+                todaySessions.filter(s => s.type === 'Work').forEach(s => {
+                    const h = new Date(s.timestamp).getHours();
+                    if (h >= 8 && h < 20) buckets[h - 8] += (s.actual_duration || s.duration || 0);
+                });
+                const peakIdx = buckets.indexOf(Math.max(...buckets));
+                return { peak: peakIdx + 8, buckets };
+            })() : { peak: null, buckets: Array(12).fill(0) };
+            const motivationQuotes = [
+                "Discipline is the bridge between goals and accomplishment.",
+                "The secret of getting ahead is getting started.",
+                "Focus on being productive instead of busy.",
+                "Small daily improvements lead to stunning results."
+            ];
+            const quoteIdx = now.getDate() % motivationQuotes.length;
+            return (
+                <div className="p-4 h-full flex flex-col w-full">
+                    <h3 className="text-gray-300 font-bold uppercase tracking-widest text-sm border-b border-white/10 pb-2 mb-3">Daily Focus Engine</h3>
+                    <div className="grid grid-cols-2 gap-3 mb-3">
+                        <div className="bg-black/40 rounded-lg p-3 border border-white/5 flex flex-col items-center">
+                            <div className={`text-4xl font-black ${isProductive ? 'text-green-400' : 'text-blue-400'}`}>{sessionsToday}</div>
+                            <div className="text-[9px] text-gray-500 uppercase tracking-widest mt-1">Sessions Done</div>
+                            <div className="w-full bg-black/50 rounded-full h-1.5 mt-2 overflow-hidden">
+                                <div className="h-full rounded-full bg-blue-500 transition-all" style={{width: `${progressPct}%`}}></div>
+                            </div>
+                            <div className="text-[8px] text-gray-500 mt-1">{progressPct}% of {sessionsGoal} goal</div>
+                        </div>
+                        <div className="bg-black/40 rounded-lg p-3 border border-white/5 flex flex-col items-center">
+                            <div className="text-4xl font-black text-white">{totalHours.toFixed(1)}</div>
+                            <div className="text-[9px] text-gray-500 uppercase tracking-widest mt-1">Hours Logged</div>
+                            {hourlyRates.peak !== null && (
+                                <div className="mt-2 flex items-center gap-1">
+                                    <i className="fas fa-bolt text-yellow-400 text-[10px]"></i>
+                                    <span className="text-[10px] text-yellow-400 font-bold">Peak: {hourlyRates.peak}:00</span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                    <div className="bg-gradient-to-r from-blue-900/30 to-purple-900/30 rounded-lg p-3 border border-blue-500/20">
+                        <i className="fas fa-quote-left text-blue-400/50 text-[10px] mb-1"></i>
+                        <p className="text-[11px] text-gray-300 italic leading-relaxed">{motivationQuotes[quoteIdx]}</p>
+                    </div>
+                </div>
+            );
+        };
 
-        const DashboardView = ({ layout, setLayout, goals, isEditingLayout, setIsEditingLayout, clockFeed, heatmap, habits, habitLogs, metrics, backend, refreshGoals, healthProfile, healthLogs, studiedHours, courseColors, dailyMetrics, setDailyMetrics, correlations, insights, activityLogs, todaySessions }) => {
+        const BestHoursWidget = ({ todaySessions, metrics }) => {
+            const chartRef = useRef(null);
+            useEffect(() => {
+                if (!chartRef.current || !window.Chart) return;
+                const ctx = chartRef.current.getContext('2d');
+                const buckets = Array(12).fill(0);
+                (todaySessions || []).filter(s => s.type === 'Work').forEach(s => {
+                    const h = new Date(s.timestamp).getHours();
+                    if (h >= 8 && h < 20) buckets[h - 8] += (s.actual_duration || s.duration || 0);
+                });
+                const maxVal = Math.max(...buckets, 1);
+                const labels = Array.from({length: 12}, (_, i) => `${String(i + 8).padStart(2, '0')}:00`);
+                const gradientColors = buckets.map(v => {
+                    const intensity = v / maxVal;
+                    if (intensity > 0.7) return 'rgba(34,197,94,0.8)';
+                    if (intensity > 0.3) return 'rgba(59,130,246,0.8)';
+                    return 'rgba(100,116,139,0.4)';
+                });
+                let chartInstance = new window.Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels,
+                        datasets: [{ label: 'Minutes', data: buckets.map(b => Math.round(b)), backgroundColor: gradientColors, borderRadius: 4, borderSkipped: false }]
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        scales: {
+                            y: { ticks: { color: 'gray', font: {size: 8}, callback: v => v + 'm' }, grid: {color: 'rgba(255,255,255,0.05)'} },
+                            x: { ticks: { color: 'gray', font: {size: 8} }, grid: {display: false} }
+                        },
+                        plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => `${ctx.raw} minutes` } } }
+                    }
+                });
+                return () => chartInstance.destroy();
+            }, [todaySessions]);
+
+            const peakHour = todaySessions && todaySessions.length > 0 ? (() => {
+                const buckets = Array(12).fill(0);
+                todaySessions.filter(s => s.type === 'Work').forEach(s => {
+                    const h = new Date(s.timestamp).getHours();
+                    if (h >= 8 && h < 20) buckets[h - 8] += (s.actual_duration || s.duration || 0);
+                });
+                const maxIdx = buckets.indexOf(Math.max(...buckets));
+                return buckets[maxIdx] > 0 ? `${String(maxIdx + 8).padStart(2, '0')}:00 - ${String(maxIdx + 9).padStart(2, '0')}:00` : 'N/A';
+            })() : 'N/A';
+
+            return (
+                <div className="p-4 h-full flex flex-col w-full">
+                    <div className="flex justify-between items-center border-b border-white/10 pb-2 mb-3">
+                        <h3 className="text-gray-300 font-bold uppercase tracking-widest text-sm">Peak Hours</h3>
+                        <span className="text-[10px] text-green-400 font-bold"><i className="fas fa-bolt mr-1"></i>{peakHour}</span>
+                    </div>
+                    <div className="flex-grow relative min-h-[120px]"><canvas ref={chartRef}></canvas></div>
+                </div>
+            );
+        };
+
+        const PomodoroMiniWidget = ({ timerState }) => {
+            const isRunning = timerState?.is_running;
+            const timeStr = timerState?.time_str || '25:00';
+            const progress = timerState?.progress || 0;
+            const course = timerState?.course || 'General';
+            const distractions = timerState?.distractions || 0;
+            const circumference = 2 * Math.PI * 54;
+            const dashOffset = circumference - (progress / 100) * circumference;
+            const color = isRunning ? '#3b82f6' : '#64748b';
+            return (
+                <div className="p-4 h-full flex flex-col items-center justify-center w-full">
+                    <h3 className="text-gray-300 font-bold uppercase tracking-widest text-sm border-b border-white/10 pb-2 mb-4 w-full text-center">Pomodoro Timer</h3>
+                    <div className="relative w-32 h-32 mb-3">
+                        <svg className="w-full h-full -rotate-90" viewBox="0 0 120 120">
+                            <circle cx="60" cy="60" r="54" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="6"/>
+                            <circle cx="60" cy="60" r="54" fill="none" stroke={color} strokeWidth="6" strokeLinecap="round"
+                                strokeDasharray={circumference} strokeDashoffset={dashOffset}
+                                className="transition-all duration-1000"
+                                style={{ filter: isRunning ? `drop-shadow(0 0 6px ${color})` : 'none' }}/>
+                        </svg>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center">
+                            <span className="text-2xl font-mono font-black text-white">{timeStr}</span>
+                            <span className={`text-[10px] font-bold uppercase tracking-widest mt-1 ${isRunning ? 'text-green-400' : 'text-gray-500'}`}>{isRunning ? 'Focus' : 'Idle'}</span>
+                        </div>
+                    </div>
+                    <div className="text-center">
+                        <div className="text-[11px] text-gray-300 font-bold truncate max-w-[200px]">{course}</div>
+                        {distractions > 0 && <div className="text-[10px] text-red-400 mt-1"><i className="fas fa-eye mr-1"></i>{distractions} distraction{distractions !== 1 ? 's' : ''}</div>}
+                    </div>
+                </div>
+            );
+        };
+
+        const WeeklyGoalBreakdownWidget = ({ backend, goals, studiedHours, flatGoals, courseColors }) => {
+            const chartRef = useRef(null);
+            const [weekData, setWeekData] = useState(null);
+
+            const findLoggedHours = (goalTitle) => {
+                if (!studiedHours || typeof studiedHours !== 'object') return 0;
+                if (studiedHours[goalTitle] !== undefined) return studiedHours[goalTitle];
+                const lc = goalTitle.toLowerCase().trim();
+                for (const [key, val] of Object.entries(studiedHours)) {
+                    if (key.toLowerCase().trim() === lc) return val;
+                }
+                return 0;
+            };
+
+            useEffect(() => {
+                if (!backend) return;
+                backend.request(JSON.stringify({action: 'get_history_data'})).then(res => {
+                    const data = JSON.parse(res);
+                    setWeekData(data.history_sessions || []);
+                });
+            }, [backend]);
+
+            useEffect(() => {
+                if (!chartRef.current || !window.Chart || !weekData || !goals) return;
+                const ctx = chartRef.current.getContext('2d');
+                const goalData = goals.filter(g => g.target_hours > 0).slice(0, 5);
+                if (goalData.length === 0) return;
+                const last7 = [];
+                for (let i = 6; i >= 0; i--) {
+                    const d = new Date(); d.setDate(d.getDate() - i);
+                    last7.push(d.toISOString().split('T')[0]);
+                }
+                const dayLabels = last7.map(d => new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short' }));
+                const colors = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#a855f7'];
+                const datasets = goalData.map((g, idx) => {
+                    const dailyMins = last7.map(dateStr => {
+                        const sessions = weekData.filter(s => s.course === g.title && s.timestamp.split('T')[0] === dateStr && s.type === 'Work');
+                        return sessions.reduce((sum, s) => sum + (s.actual_duration || s.duration || 0), 0) / 60;
+                    });
+                    const totalWeek = dailyMins.reduce((a, b) => a + b, 0);
+                    const target = g.target_hours || 1;
+                    const pct = Math.min(100, Math.round((totalWeek / target) * 7));
+                    return {
+                        label: `${g.title.substring(0, 12)}${g.title.length > 12 ? '...' : ''} (${pct}%)`,
+                        data: dailyMins,
+                        backgroundColor: colors[idx] + 'CC',
+                        borderRadius: 3,
+                        borderSkipped: false
+                    };
+                });
+                let chartInstance = new window.Chart(ctx, {
+                    type: 'bar',
+                    data: { labels: dayLabels, datasets },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        scales: {
+                            y: { stacked: false, ticks: { color: 'gray', font: {size: 8}, callback: v => v + 'h' }, grid: {color: 'rgba(255,255,255,0.05)'} },
+                            x: { stacked: false, ticks: { color: 'gray', font: {size: 9} }, grid: {display: false} }
+                        },
+                        plugins: { legend: { labels: { color: 'white', boxWidth: 10, font: {size: 9} } }, tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label.split(' (')[0]}: ${ctx.raw.toFixed(1)}h` } } }
+                    }
+                });
+                return () => chartInstance.destroy();
+            }, [weekData, goals, studiedHours]);
+
+            return (
+                <div className="p-4 h-full flex flex-col w-full">
+                    <h3 className="text-gray-300 font-bold uppercase tracking-widest text-sm border-b border-white/10 pb-2 mb-3">Weekly Goal Breakdown</h3>
+                    <div className="flex-grow relative min-h-[180px]"><canvas ref={chartRef}></canvas></div>
+                </div>
+            );
+        };
+
+
+        const DashboardView = ({ layout, setLayout, goals, isEditingLayout, setIsEditingLayout, clockFeed, heatmap, habits, habitLogs, metrics, backend, refreshGoals, healthProfile, healthLogs, studiedHours, courseColors, dailyMetrics, setDailyMetrics, correlations, insights, activityLogs, todaySessions, flatGoals, timerState }) => {
             const SIZE_OPTIONS = ['quarter', 'third', 'half', 'full'];
             const SIZE_CLASSES = { quarter: 'w-full md:w-1/4', third: 'w-full md:w-1/3', half: 'w-full md:w-1/2', full: 'w-full' };
+            const HEIGHT_OPTIONS = ['auto', 'sm', 'md', 'lg', 'xl'];
+            const HEIGHT_CLASSES = { auto: 'min-h-[200px]', sm: 'min-h-[250px]', md: 'min-h-[320px]', lg: 'min-h-[420px]', xl: 'min-h-[520px]' };
+            const HEIGHT_LABELS = { auto: 'Auto', sm: 'S', md: 'M', lg: 'L', xl: 'XL' };
+
+            const dragItem = useRef(null);
+            const dragOverItem = useRef(null);
+
+            const handleDragStart = (e, id) => {
+                dragItem.current = id;
+                e.dataTransfer.effectAllowed = 'move';
+                e.currentTarget.style.opacity = '0.5';
+            };
+
+            const handleDragOver = (e, id) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                dragOverItem.current = id;
+            };
+
+            const handleDragEnd = (e) => {
+                e.currentTarget.style.opacity = '1';
+                if (!dragItem.current || !dragOverItem.current || dragItem.current === dragOverItem.current) return;
+                setLayout(prev => {
+                    const sorted = [...prev].sort((a, b) => a.order - b.order);
+                    const fromIdx = sorted.findIndex(w => w.id === dragItem.current);
+                    const toIdx = sorted.findIndex(w => w.id === dragOverItem.current);
+                    if (fromIdx < 0 || toIdx < 0) return prev;
+                    const moved = sorted.splice(fromIdx, 1)[0];
+                    sorted.splice(toIdx, 0, moved);
+                    return sorted.map((w, i) => ({ ...w, order: i }));
+                });
+                dragItem.current = null;
+                dragOverItem.current = null;
+            };
 
             const toggleWidgetVisibility = (id) => setLayout(prev => prev.map(w => w.id === id ? { ...w, visible: !w.visible } : w));
             const cycleWidgetSize = (id) => setLayout(prev => prev.map(w => {
@@ -472,19 +751,13 @@
                 const next = SIZE_OPTIONS[(idx + 1) % SIZE_OPTIONS.length];
                 return { ...w, size: next };
             }));
-            const moveWidget = (id, dir) => {
-                setLayout(prev => {
-                    const sorted = [...prev].sort((a,b) => a.order - b.order);
-                    const idx = sorted.findIndex(w => w.id === id);
-                    if (idx < 0) return prev;
-                    const swap = dir === 'up' ? idx - 1 : idx + 1;
-                    if (swap < 0 || swap >= sorted.length) return prev;
-                    const temp = sorted[idx].order;
-                    sorted[idx] = { ...sorted[idx], order: sorted[swap].order };
-                    sorted[swap] = { ...sorted[swap], order: temp };
-                    return sorted;
-                });
-            };
+            const cycleWidgetHeight = (id) => setLayout(prev => prev.map(w => {
+                if (w.id !== id) return w;
+                const curH = w.height || 'md';
+                const idx = HEIGHT_OPTIONS.indexOf(curH);
+                const next = HEIGHT_OPTIONS[(idx + 1) % HEIGHT_OPTIONS.length];
+                return { ...w, height: next };
+            }));
 
             const renderWidget = (widget) => {
                 switch(widget.type) {
@@ -494,14 +767,18 @@
                     case 'GitHubMatrix': return <NativeGitHubMatrix heatmap={heatmap} />;
                     case 'HabitsWidget': return <DashboardHabitWidget habits={habits} habitLogs={habitLogs} />;
                     case 'MetricsWidget': return <MetricsWidget metrics={metrics} />;
-                    case 'ArchitectureWidget': return <DashboardArchitectureWidget goals={goals} studiedHours={studiedHours} courseColors={courseColors} />;
-                    case 'GoalProgress': return <GoalProgressWidget goals={goals} studiedHours={studiedHours} courseColors={courseColors} />;
-                    case 'GoalTimeChart': return <GoalTimeChartWidget backend={backend} goals={goals} studiedHours={studiedHours} />;
+                    case 'ArchitectureWidget': return <DashboardArchitectureWidget goals={goals} studiedHours={studiedHours} courseColors={courseColors} flatGoals={flatGoals} />;
+                    case 'GoalProgress': return <GoalProgressWidget goals={goals} studiedHours={studiedHours} courseColors={courseColors} flatGoals={flatGoals} />;
+                    case 'GoalTimeChart': return <GoalTimeChartWidget backend={backend} goals={goals} studiedHours={studiedHours} flatGoals={flatGoals} />;
                     case 'DailySummary': return <DailySummaryWidget metrics={metrics} todaySessions={todaySessions} />;
                     case 'RecentActivity': return <RecentActivityWidget activityLogs={activityLogs} />;
                     case 'HealthTrends': return <DashboardHealthWidget healthProfile={healthProfile} healthLogs={healthLogs} />;
                     case 'DailyCheckin': return <DailyCheckinWidget backend={backend} dailyMetrics={dailyMetrics} setDailyMetrics={setDailyMetrics} />;
                     case 'CorrelationCharts': return <CorrelationChartsWidget backend={backend} correlations={correlations} insights={insights} />;
+                    case 'StudyStreak': return <StudyStreakWidget todaySessions={todaySessions} metrics={metrics} />;
+                    case 'BestHours': return <BestHoursWidget todaySessions={todaySessions} metrics={metrics} />;
+                    case 'PomodoroMini': return <PomodoroMiniWidget timerState={timerState} />;
+                    case 'WeeklyGoalBreakdown': return <WeeklyGoalBreakdownWidget backend={backend} goals={goals} studiedHours={studiedHours} flatGoals={flatGoals} courseColors={courseColors} />;
                     default: return null;
                 }
             };
@@ -527,17 +804,24 @@
                     <div className="flex flex-wrap -mx-3 items-stretch overflow-y-auto pb-10 flex-grow content-start">
                         {sortedLayout.filter(w => isEditingLayout || w.visible).map((widget) => {
                             const widthClass = SIZE_CLASSES[widget.size] || SIZE_CLASSES.half;
+                            const heightClass = HEIGHT_CLASSES[widget.height || 'md'] || HEIGHT_CLASSES.md;
                             return (
-                                <div key={widget.id} className={`${widthClass} px-3 mb-6 transition-all duration-300`}>
-                                    <div className={`glass-panel overflow-hidden h-full flex flex-col relative ${!widget.visible ? 'opacity-30 grayscale' : ''}`} style={{ minHeight: '320px' }}>
+                                <div key={widget.id}
+                                    className={`${widthClass} px-3 mb-6 transition-all duration-300`}
+                                    draggable={isEditingLayout}
+                                    onDragStart={(e) => handleDragStart(e, widget.id)}
+                                    onDragOver={(e) => handleDragOver(e, widget.id)}
+                                    onDragEnd={handleDragEnd}
+                                >
+                                    <div className={`glass-panel overflow-hidden h-full flex flex-col relative ${!widget.visible ? 'opacity-30 grayscale' : ''} ${heightClass}`} style={isEditingLayout ? { cursor: 'grab' } : {}}>
                                         {isEditingLayout && (
                                             <div className="absolute inset-0 bg-black/80 z-50 flex flex-col items-center justify-center backdrop-blur-sm gap-3 rounded-xl border-2 border-blue-500 border-dashed">
                                                 <div className="text-white font-bold text-lg uppercase tracking-widest">{widget.type}</div>
                                                 <div className="flex gap-2 mt-4 flex-wrap justify-center">
                                                     <button onClick={() => toggleWidgetVisibility(widget.id)} className={`px-3 py-1.5 rounded text-xs font-bold ${widget.visible ? 'bg-green-600' : 'bg-red-600'} text-white`}><i className={`fas fa-${widget.visible ? 'eye' : 'eye-slash'} mr-1`}></i> {widget.visible ? 'Hide' : 'Show'}</button>
-                                                    <button onClick={() => cycleWidgetSize(widget.id)} className="px-3 py-1.5 rounded text-xs font-bold bg-blue-600 text-white"><i className="fas fa-arrows-alt-h mr-1"></i> Size: {widget.size}</button>
-                                                    <button onClick={() => moveWidget(widget.id, 'up')} className="px-2 py-1.5 rounded text-xs font-bold bg-white/10 text-white hover:bg-white/20"><i className="fas fa-arrow-up"></i></button>
-                                                    <button onClick={() => moveWidget(widget.id, 'down')} className="px-2 py-1.5 rounded text-xs font-bold bg-white/10 text-white hover:bg-white/20"><i className="fas fa-arrow-down"></i></button>
+                                                    <button onClick={() => cycleWidgetSize(widget.id)} className="px-3 py-1.5 rounded text-xs font-bold bg-blue-600 text-white"><i className="fas fa-arrows-alt-h mr-1"></i> Width: {widget.size}</button>
+                                                    <button onClick={() => cycleWidgetHeight(widget.id)} className="px-3 py-1.5 rounded text-xs font-bold bg-purple-600 text-white"><i className="fas fa-arrows-alt-v mr-1"></i> Height: {HEIGHT_LABELS[widget.height || 'md']}</button>
+                                                    <div className="flex items-center gap-1 text-white text-[10px]"><i className="fas fa-grip-vertical text-gray-400"></i> Drag to reorder</div>
                                                 </div>
                                             </div>
                                         )}

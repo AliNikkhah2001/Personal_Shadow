@@ -168,6 +168,13 @@ class DashboardActionsMixin:
                         "global_study_hours": global_study_hours,
                         "global_target_hours": global_target_hours,
                     },
+                    "studied_hours": {
+                        r[0]: (r[1] or 0) / 60.0
+                        for r in db.c.execute(
+                            "SELECT course, sum(actual_duration) FROM pomodoro_sessions WHERE type='Work' AND date(timestamp)=?",
+                            (today_str,),
+                        ).fetchall()
+                    },
                 }
             )
         except Exception as e:

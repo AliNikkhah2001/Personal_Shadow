@@ -1,20 +1,24 @@
 ﻿        const { useState, useEffect, useMemo, useRef, useCallback } = React;
 
         const DEFAULT_LAYOUT = [
-            { id: 'clock', type: 'Clock', size: 'half', visible: true, order: 0 },
-            { id: 'targets', type: 'GlobalTargets', size: 'half', visible: true, order: 1 },
-            { id: 'daily_summary', type: 'DailySummary', size: 'third', visible: true, order: 2 },
-            { id: 'daily_checkin', type: 'DailyCheckin', size: 'third', visible: true, order: 3 },
-            { id: 'correlations', type: 'CorrelationCharts', size: 'third', visible: true, order: 4 },
-            { id: 'goal_progress', type: 'GoalProgress', size: 'half', visible: true, order: 5 },
-            { id: 'goal_time_chart', type: 'GoalTimeChart', size: 'half', visible: true, order: 6 },
-            { id: 'calendar', type: 'Calendar', size: 'full', visible: true, order: 7 },
-            { id: 'matrix', type: 'GitHubMatrix', size: 'half', visible: true, order: 8 },
-            { id: 'recent_activity', type: 'RecentActivity', size: 'half', visible: true, order: 9 },
-            { id: 'habits', type: 'HabitsWidget', size: 'half', visible: true, order: 10 },
-            { id: 'metrics', type: 'MetricsWidget', size: 'half', visible: true, order: 11 },
-            { id: 'architecture', type: 'ArchitectureWidget', size: 'full', visible: true, order: 12 },
-            { id: 'health_trends', type: 'HealthTrends', size: 'full', visible: true, order: 13 }
+            { id: 'pomodoro_mini', type: 'PomodoroMini', size: 'quarter', visible: true, order: 0 },
+            { id: 'clock', type: 'Clock', size: 'quarter', visible: true, order: 1 },
+            { id: 'targets', type: 'GlobalTargets', size: 'quarter', visible: true, order: 2 },
+            { id: 'study_streak', type: 'StudyStreak', size: 'quarter', visible: true, order: 3 },
+            { id: 'daily_summary', type: 'DailySummary', size: 'third', visible: true, order: 4 },
+            { id: 'daily_checkin', type: 'DailyCheckin', size: 'third', visible: true, order: 5 },
+            { id: 'correlations', type: 'CorrelationCharts', size: 'third', visible: true, order: 6 },
+            { id: 'goal_progress', type: 'GoalProgress', size: 'half', visible: true, order: 7 },
+            { id: 'goal_time_chart', type: 'GoalTimeChart', size: 'half', visible: true, order: 8 },
+            { id: 'weekly_breakdown', type: 'WeeklyGoalBreakdown', size: 'half', visible: true, order: 9 },
+            { id: 'best_hours', type: 'BestHours', size: 'half', visible: true, order: 10 },
+            { id: 'calendar', type: 'Calendar', size: 'full', visible: true, order: 11 },
+            { id: 'matrix', type: 'GitHubMatrix', size: 'half', visible: true, order: 12 },
+            { id: 'recent_activity', type: 'RecentActivity', size: 'half', visible: true, order: 13 },
+            { id: 'habits', type: 'HabitsWidget', size: 'half', visible: true, order: 14 },
+            { id: 'metrics', type: 'MetricsWidget', size: 'half', visible: true, order: 15 },
+            { id: 'architecture', type: 'ArchitectureWidget', size: 'full', visible: true, order: 16 },
+            { id: 'health_trends', type: 'HealthTrends', size: 'full', visible: true, order: 17 }
         ];
 
         const App = () => {
@@ -198,6 +202,7 @@
                             if (data.notes) setNotes(data.notes);
                             if (data.course_colors) setCourseColors(data.course_colors);
                             if (data.metrics_data) setMetrics(data.metrics_data);
+                            if (data.studied_hours) setStudiedHours(data.studied_hours);
 
                             if (data.health_profile) {
                                 setHealthProfile(data.health_profile);
@@ -288,7 +293,7 @@
             
             const renderContent = () => {
                 switch(currentView) {
-                    case 'dashboard': return <DashboardView layout={layout} setLayout={setLayout} goals={goals} isEditingLayout={isEditingLayout} setIsEditingLayout={setIsEditingLayout} clockFeed={clockFeed} heatmap={heatmap} habits={habits} habitLogs={habitLogs} metrics={metrics} backend={backend} refreshGoals={refreshGoals} healthProfile={healthProfile} healthLogs={healthLogs} studiedHours={studiedHours} courseColors={courseColors} dailyMetrics={dailyMetrics} setDailyMetrics={setDailyMetrics} correlations={correlations} insights={insights} activityLogs={activityLogs} todaySessions={todaySessions} />;
+                    case 'dashboard': return <DashboardView layout={layout} setLayout={setLayout} goals={goals} isEditingLayout={isEditingLayout} setIsEditingLayout={setIsEditingLayout} clockFeed={clockFeed} heatmap={heatmap} habits={habits} habitLogs={habitLogs} metrics={metrics} backend={backend} refreshGoals={refreshGoals} healthProfile={healthProfile} healthLogs={healthLogs} studiedHours={studiedHours} courseColors={courseColors} dailyMetrics={dailyMetrics} setDailyMetrics={setDailyMetrics} correlations={correlations} insights={insights} activityLogs={activityLogs} todaySessions={todaySessions} flatGoals={flatGoals} timerState={timerState} />;
                     case 'health': return <HealthFitnessView backend={backend} healthProfile={healthProfile} setHealthProfile={setHealthProfile} healthLogs={healthLogs} setHealthLogs={setHealthLogs} customFoods={customFoods} customActivities={customActivities} healthPlans={healthPlans} ingredients={ingredients} setIngredients={setIngredients} compositeFoods={compositeFoods} setCompositeFoods={setCompositeFoods} onScanParsed={(data) => { setScanEditData(data); setShowScanModal(true); }} />;
                     case 'hub': return <ProductivityHubView backend={backend} timerState={timerState} flatGoals={flatGoals} queue={queue} refreshQueue={setQueue} settings={settings} todaySessions={todaySessions} courseColors={courseColors} />;
                     case 'architecture': return <LifeArchitectureView goals={goals} backend={backend} refreshGoals={(d) => {setGoals(d.goals); setFlatGoals(d.flat_goals);}} courseColors={courseColors} studiedHours={studiedHours} />;
