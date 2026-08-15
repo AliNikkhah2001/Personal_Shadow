@@ -302,6 +302,10 @@ class SyncManager(QObject):
             except Exception as e:
                 print(f"Failed to read {filename}: {e}")
 
+        # Collect all deleted UUIDs across all tables to prevent re-import
+        db.c.execute("SELECT table_name, uuid FROM deleted_uuids")
+        deleted_set = {(t, u) for t, u in db.c.fetchall()}
+
         # Process each table
         for table in valid_tables:
             # Apply deletions from all remote devices
@@ -314,14 +318,22 @@ class SyncManager(QObject):
                     if row and (not row[0] or del_time > row[0]):
                         db.c.execute(f"DELETE FROM {table} WHERE uuid = ?", (uid,))
                         db.c.execute("DELETE FROM deleted_uuids WHERE table_name=? AND uuid=?", (table, uid))
+                        deleted_set.add((table, uid))
 
             # Merge rows (master wins, else last-write-wins)
+            db.c.execute(f"PRAGMA table_info({table})")
+            cols = [info[1] for info in db.c.fetchall()]
+            if "uuid" not in cols or "modified_at" not in cols:
+                continue
+
             for dev_id, remote_data in remote_data_by_device.items():
                 rows = remote_data.get("tables", {}).get(table, [])
                 for row in rows:
                     row = {key: self._decode_json_value(value) for key, value in row.items()}
                     uid = row.get("uuid")
                     if not uid:
+                        continue
+                    if (table, uid) in deleted_set:
                         continue
                     db.c.execute(f"SELECT id, modified_at FROM {table} WHERE uuid = ?", (uid,))
                     existing = db.c.fetchone()

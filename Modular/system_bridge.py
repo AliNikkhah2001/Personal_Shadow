@@ -86,6 +86,11 @@ class SystemBridge(
     scan_ready = pyqtSignal(str)
     sync_progress = pyqtSignal(str)
 
+    @property
+    def config(self):
+        from core_sys import config as cfg
+        return cfg
+
     def __init__(self):
         super().__init__()
         self.ovl = OverlayWidget()
