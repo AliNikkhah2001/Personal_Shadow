@@ -405,42 +405,106 @@ class SyncManager(QObject):
         local_paths = config.get("sync_local_paths", [])
         if not local_paths:
             return
-        device_files_dir = os.path.join(self.repo_path, self.files_dir, self.device_id)
-        os.makedirs(device_files_dir, exist_ok=True)
 
+        shared_files_dir = os.path.join(self.repo_path, self.files_dir)
+        manifest_path = os.path.join(shared_files_dir, f"_manifest_{self.device_id}.json")
+
+        local_manifest = {}
         for local_path in local_paths:
             if not os.path.exists(local_path):
                 continue
             base_folder = os.path.basename(os.path.normpath(local_path))
-
             for root, _dirs, files in os.walk(local_path):
                 rel_path = os.path.relpath(root, local_path)
-                target_dir = os.path.join(device_files_dir, base_folder, rel_path)
-                if rel_path == ".":
-                    target_dir = os.path.join(device_files_dir, base_folder)
-                os.makedirs(target_dir, exist_ok=True)
-
                 for f in files:
                     src = os.path.join(root, f)
-                    dst = os.path.join(target_dir, f)
                     try:
-                        file_size_mb = os.path.getsize(src) / (1024 * 1024)
-                        if file_size_mb > 95:
+                        stat = os.stat(src)
+                        if stat.st_size > 100 * 1024 * 1024:
                             continue
-                        shutil.copy2(src, dst)
+                        if rel_path == ".":
+                            key = os.path.join(base_folder, f)
+                        else:
+                            key = os.path.join(base_folder, rel_path, f)
+                        local_manifest[key] = {
+                            "size": stat.st_size,
+                            "mtime": stat.st_mtime,
+                            "src": src,
+                        }
                     except Exception:
                         pass
+
+        prev_manifest = {}
+        if os.path.exists(manifest_path):
+            try:
+                with open(manifest_path) as f:
+                    prev_manifest = json.load(f)
+            except Exception:
+                pass
+
+        new_files = 0
+        changed_files = 0
+        deleted_files = 0
+
+        for key, info in local_manifest.items():
+            dst = os.path.join(shared_files_dir, key)
+            prev = prev_manifest.get(key)
+            if prev and prev.get("size") == info["size"] and prev.get("mtime") == info["mtime"]:
+                continue
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            try:
+                shutil.copy2(info["src"], dst)
+                if prev:
+                    changed_files += 1
+                else:
+                    new_files += 1
+            except Exception:
+                pass
+
+        for key in prev_manifest:
+            if key not in local_manifest:
+                dst = os.path.join(shared_files_dir, key)
+                if os.path.exists(dst):
+                    try:
+                        os.remove(dst)
+                        deleted_files += 1
+                    except Exception:
+                        pass
+
+        for key, info in local_manifest.items():
+            remote_file = os.path.join(shared_files_dir, key)
+            if os.path.exists(remote_file):
+                try:
+                    remote_stat = os.stat(remote_file)
+                    local_stat = os.stat(info["src"])
+                    if remote_stat.st_mtime > local_stat.st_mtime:
+                        os.makedirs(os.path.dirname(info["src"]), exist_ok=True)
+                        shutil.copy2(remote_file, info["src"])
+                except Exception:
+                    pass
+
+        with open(manifest_path, "w") as f:
+            json.dump(
+                {k: {"size": v["size"], "mtime": v["mtime"]} for k, v in local_manifest.items()},
+                f,
+            )
+
+        self.sync_progress.emit(
+            f"Files: {new_files} new, {changed_files} changed, {deleted_files} deleted"
+        )
 
     def get_network_folders(self):
         network_dir = os.path.join(self.repo_path, self.files_dir)
         folders = []
         if os.path.exists(network_dir):
-            for dev_id in os.listdir(network_dir):
-                dev_path = os.path.join(network_dir, dev_id)
-                if os.path.isdir(dev_path):
+            for entry in os.listdir(network_dir):
+                entry_path = os.path.join(network_dir, entry)
+                if entry.startswith("_manifest_"):
+                    continue
+                if os.path.isdir(entry_path):
                     file_count = 0
                     latest_mod = 0
-                    for root, _, files in os.walk(dev_path):
+                    for root, _, files in os.walk(entry_path):
                         for f in files:
                             if ".git" in root:
                                 continue
@@ -454,13 +518,27 @@ class SyncManager(QObject):
                     )
                     folders.append(
                         {
-                            "device_id": dev_id,
-                            "is_local": dev_id == self.device_id,
+                            "device_id": entry,
+                            "is_local": entry == self.device_id,
                             "file_count": file_count,
                             "last_update": last_update,
-                            "path": dev_path,
+                            "path": entry_path,
                         }
                     )
+
+            manifest_files = [f for f in os.listdir(network_dir) if f.startswith("_manifest_")]
+            for mf in manifest_files:
+                dev_id = mf.replace("_manifest_", "").replace(".json", "")
+                manifest_path = os.path.join(network_dir, mf)
+                try:
+                    with open(manifest_path) as f:
+                        manifest = json.load(f)
+                    existing = next((x for x in folders if x["device_id"] == dev_id), None)
+                    if existing:
+                        existing["file_count"] = len(manifest)
+                except Exception:
+                    pass
+
         return folders
 
     def map_folder(self, local_path):
