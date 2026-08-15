@@ -30,9 +30,3 @@ const SettingsView = React.memo(({ settings, setSettings, backend, networkFolder
         </div>
     </div>;
 });
-
-const NavBtn = React.memo(({id, icon, label, current, set, collapsed}) => <button onClick={() => set(id)} className={`flex items-center p-3 md:px-4 rounded-lg transition-all duration-200 group relative ${current === id ? 'bg-white/10 text-white border border-white/10 shadow-[inset_0_0_15px_rgba(255,255,255,0.05)]' : 'text-gray-400 hover:bg-white/5 hover:text-gray-200 border border-transparent'} ${collapsed ? 'justify-center' : 'justify-start'}`}>
-    <i className={`fas ${icon} text-lg w-6 text-center transition-transform group-hover:scale-110 ${current === id ? 'text-blue-400' : ''} ${collapsed ? '' : 'mr-4'}`}></i>
-    {!collapsed && <span className="font-bold text-[11px] tracking-widest uppercase whitespace-nowrap">{label}</span>}
-    {collapsed && <div className="absolute left-14 bg-black border border-white/10 text-white text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-50 shadow-xl">{label}</div>}
-</button>);

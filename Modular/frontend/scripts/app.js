@@ -3,14 +3,18 @@
         const DEFAULT_LAYOUT = [
             { id: 'clock', type: 'Clock', size: 'half', visible: true, order: 0 },
             { id: 'targets', type: 'GlobalTargets', size: 'half', visible: true, order: 1 },
-            { id: 'daily_checkin', type: 'DailyCheckin', size: 'half', visible: true, order: 2 },
-            { id: 'correlations', type: 'CorrelationCharts', size: 'half', visible: true, order: 3 },
-            { id: 'calendar', type: 'Calendar', size: 'full', visible: true, order: 4 },
-            { id: 'matrix', type: 'GitHubMatrix', size: 'full', visible: true, order: 5 },
-            { id: 'habits', type: 'HabitsWidget', size: 'half', visible: true, order: 6 },
-            { id: 'metrics', type: 'MetricsWidget', size: 'half', visible: true, order: 7 },
-            { id: 'architecture', type: 'ArchitectureWidget', size: 'full', visible: true, order: 8 },
-            { id: 'health_trends', type: 'HealthTrends', size: 'full', visible: true, order: 9 }
+            { id: 'daily_summary', type: 'DailySummary', size: 'third', visible: true, order: 2 },
+            { id: 'daily_checkin', type: 'DailyCheckin', size: 'third', visible: true, order: 3 },
+            { id: 'correlations', type: 'CorrelationCharts', size: 'third', visible: true, order: 4 },
+            { id: 'goal_progress', type: 'GoalProgress', size: 'half', visible: true, order: 5 },
+            { id: 'goal_time_chart', type: 'GoalTimeChart', size: 'half', visible: true, order: 6 },
+            { id: 'calendar', type: 'Calendar', size: 'full', visible: true, order: 7 },
+            { id: 'matrix', type: 'GitHubMatrix', size: 'half', visible: true, order: 8 },
+            { id: 'recent_activity', type: 'RecentActivity', size: 'half', visible: true, order: 9 },
+            { id: 'habits', type: 'HabitsWidget', size: 'half', visible: true, order: 10 },
+            { id: 'metrics', type: 'MetricsWidget', size: 'half', visible: true, order: 11 },
+            { id: 'architecture', type: 'ArchitectureWidget', size: 'full', visible: true, order: 12 },
+            { id: 'health_trends', type: 'HealthTrends', size: 'full', visible: true, order: 13 }
         ];
 
         const App = () => {
@@ -284,10 +288,10 @@
             
             const renderContent = () => {
                 switch(currentView) {
-                    case 'dashboard': return <DashboardView layout={layout} setLayout={setLayout} goals={goals} isEditingLayout={isEditingLayout} setIsEditingLayout={setIsEditingLayout} clockFeed={clockFeed} heatmap={heatmap} habits={habits} habitLogs={habitLogs} metrics={metrics} backend={backend} refreshGoals={refreshGoals} healthProfile={healthProfile} healthLogs={healthLogs} studiedHours={studiedHours} courseColors={courseColors} dailyMetrics={dailyMetrics} setDailyMetrics={setDailyMetrics} correlations={correlations} insights={insights} />;
+                    case 'dashboard': return <DashboardView layout={layout} setLayout={setLayout} goals={goals} isEditingLayout={isEditingLayout} setIsEditingLayout={setIsEditingLayout} clockFeed={clockFeed} heatmap={heatmap} habits={habits} habitLogs={habitLogs} metrics={metrics} backend={backend} refreshGoals={refreshGoals} healthProfile={healthProfile} healthLogs={healthLogs} studiedHours={studiedHours} courseColors={courseColors} dailyMetrics={dailyMetrics} setDailyMetrics={setDailyMetrics} correlations={correlations} insights={insights} activityLogs={activityLogs} todaySessions={todaySessions} />;
                     case 'health': return <HealthFitnessView backend={backend} healthProfile={healthProfile} setHealthProfile={setHealthProfile} healthLogs={healthLogs} setHealthLogs={setHealthLogs} customFoods={customFoods} customActivities={customActivities} healthPlans={healthPlans} ingredients={ingredients} setIngredients={setIngredients} compositeFoods={compositeFoods} setCompositeFoods={setCompositeFoods} onScanParsed={(data) => { setScanEditData(data); setShowScanModal(true); }} />;
                     case 'hub': return <ProductivityHubView backend={backend} timerState={timerState} flatGoals={flatGoals} queue={queue} refreshQueue={setQueue} settings={settings} todaySessions={todaySessions} courseColors={courseColors} />;
-                    case 'architecture': return <LifeArchitectureView goals={goals} backend={backend} refreshGoals={(d) => {setGoals(d.goals); setFlatGoals(d.flat_goals);}} courseColors={courseColors} />;
+                    case 'architecture': return <LifeArchitectureView goals={goals} backend={backend} refreshGoals={(d) => {setGoals(d.goals); setFlatGoals(d.flat_goals);}} courseColors={courseColors} studiedHours={studiedHours} />;
                     case 'habits': return <HabitMatrixView habits={habits} backend={backend} refreshHabits={setHabits} habitLogs={habitLogs} setHabitLogs={setHabitLogs} />;
                     case 'summary': return <DaySummaryView metrics={metrics} />;
                     case 'library': return <PDFLibraryView backend={backend} />;

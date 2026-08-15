@@ -1,6 +1,6 @@
-        const LifeArchitectureView = ({ goals, backend, refreshGoals, courseColors }) => {
+        const LifeArchitectureView = ({ goals, backend, refreshGoals, courseColors, studiedHours }) => {
             const [title, setTitle] = useState(""); const [target, setTarget] = useState(""); const [parent, setParent] = useState(""); const [deadline, setDeadline] = useState(new Date(new Date().getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16));
-            
+
             const addGoal = () => { backend.request(JSON.stringify({action: 'manage_goal', sub: 'add', title: title, target_hours: target, parent_id: parent || null, deadline: deadline.replace('T', ' ')})).then(res => { refreshGoals(JSON.parse(res)); setTitle(""); setTarget(""); }); };
             const delGoal = (id) => { backend.request(JSON.stringify({action: 'manage_goal', sub: 'delete', id: id})).then(res => { refreshGoals(JSON.parse(res)); }); };
 
@@ -11,21 +11,33 @@
             };
 
             const renderNode = (node, depth=0) => {
-                // Ensure nodes inherit their parent's color properly in the UI
                 const nodeColor = (courseColors && courseColors[node.title]) ? courseColors[node.title] : '#ffffff';
-                
+                const logged = studiedHours && studiedHours[node.title] ? studiedHours[node.title] : 0;
+                const pct = node.target_hours > 0 ? Math.min(100, Math.round((logged / node.target_hours) * 100)) : 0;
+
                 return (
                     <div key={node.id} style={{ marginLeft: depth * 20 }} className="mb-2">
-                        <div className="flex justify-between items-center bg-black/20 p-2 rounded hover:bg-white/5 border" style={{ borderColor: `${nodeColor}40`, borderLeft: `4px solid ${nodeColor}` }}>
-                            <span>
-                                <strong style={{ color: nodeColor }}>{node.title}</strong> 
-                                {node.target_hours > 0 && <span className="text-gray-400 ml-2">- Target: {node.target_hours}h</span>} 
-                                {node.deadline && <span className="text-[10px] text-yellow-500 ml-2">DL: {node.deadline}</span>}
-                            </span>
-                            <div className="flex gap-3">
-                                <button onClick={() => setParent(node.id)} className="text-xs text-blue-400 hover:text-blue-300">+ Sub</button>
-                                <i onClick={() => delGoal(node.id)} className="fas fa-trash text-red-500 cursor-pointer hover:scale-110"></i>
+                        <div className="flex flex-col bg-black/20 p-3 rounded hover:bg-white/5 border transition" style={{ borderColor: `${nodeColor}40`, borderLeft: `4px solid ${nodeColor}` }}>
+                            <div className="flex justify-between items-center">
+                                <span>
+                                    <strong style={{ color: nodeColor }}>{node.title}</strong>
+                                    {node.target_hours > 0 && <span className="text-gray-400 ml-2 text-xs">Target: {node.target_hours}h</span>}
+                                    {node.deadline && <span className="text-[10px] text-yellow-500 ml-2">DL: {node.deadline}</span>}
+                                </span>
+                                <div className="flex gap-3 items-center">
+                                    {node.target_hours > 0 && <span className="text-xs font-bold" style={{color: nodeColor}}>{pct}%</span>}
+                                    <button onClick={() => setParent(node.id)} className="text-xs text-blue-400 hover:text-blue-300">+ Sub</button>
+                                    <i onClick={() => delGoal(node.id)} className="fas fa-trash text-red-500 cursor-pointer hover:scale-110"></i>
+                                </div>
                             </div>
+                            {node.target_hours > 0 && (
+                                <div className="flex items-center gap-2 mt-2">
+                                    <div className="flex-grow h-1.5 bg-black/50 rounded-full overflow-hidden">
+                                        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: nodeColor }}></div>
+                                    </div>
+                                    <span className="text-[9px] text-gray-400 font-mono shrink-0">{logged.toFixed(1)}h / {node.target_hours}h</span>
+                                </div>
+                            )}
                         </div>
                         {node.children.map(child => renderNode(child, depth + 1))}
                     </div>
@@ -52,7 +64,7 @@
             const [newName, setNewName] = useState(""); const [newType, setNewType] = useState("Positive"); const [editingId, setEditingId] = useState(null);
             const days = []; const today = new Date();
             for (let i = 6; i >= 0; i--) { const date = new Date(today); date.setDate(date.getDate() - i); days.push(date.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' })); }
-            
+
             const calculateStreak = (habitId) => {
                 if (!habitLogs || habitLogs.length === 0) return 0;
                 const logs = habitLogs.filter(log => log.habit_id === habitId).sort((a, b) => new Date(a.date) - new Date(b.date));
@@ -65,13 +77,13 @@
                 }
                 return streak;
             };
-            
+
             const handleAction = (sub, id, name, type) => {
                 backend.request(JSON.stringify({action: 'manage_habit', sub: sub, id: id, name: name || newName, type: type || newType})).then(res => {
                     const data = JSON.parse(res); if (data.habits) refreshHabits(data.habits); if (data.habit_logs) setHabitLogs(data.habit_logs); setNewName(""); setEditingId(null);
                 });
             };
-            
+
             const toggleLog = (hid, dateStr) => {
                 const logExists = habitLogs && habitLogs.some(log => log.habit_id === hid && log.date === dateStr);
                 const currentStatus = logExists ? 1 : 0; const newStatus = currentStatus === 1 ? 0 : 1;
@@ -79,7 +91,7 @@
                     const data = JSON.parse(res); if (data.habits) refreshHabits(data.habits); if (data.habit_logs) setHabitLogs(data.habit_logs);
                 });
             };
-            
+
             return (
                 <div className="h-full flex flex-col fade-in">
                     <div className="flex justify-between items-center mb-6 shrink-0"><h2 className="text-2xl font-serif font-bold text-white tracking-widest uppercase drop-shadow-md">Habit Matrix</h2><span className="text-xs text-gray-400 font-mono">7-DAY ROLLING</span></div>
@@ -108,9 +120,9 @@
                                             <td className={`p-4 text-sm font-bold tracking-wide ${isPos ? 'text-green-400' : 'text-red-400'}`}>
                                                 {editingId === h.id ? (<input type="text" className="glass-input px-2 py-1 rounded text-xs w-full" defaultValue={h.name} onBlur={(e) => handleAction('edit', h.id, e.target.value, h.type)} autoFocus />) : (<span>{isPos ? '+' : '-'} {h.name}</span>)}
                                             </td>
-                                            <td className="p-4 text-xs font-mono text-blue-400 text-center font-bold">{streak > 0 ? `${streak}d` : '—'}</td>
+                                            <td className="p-4 text-xs font-mono text-blue-400 text-center font-bold">{streak > 0 ? `${streak}d` : '\u2014'}</td>
                                             {days.map((day, dIdx) => (
-                                                <td key={dIdx} className="p-4 text-center"><input type="checkbox" onChange={() => toggleLog(h.id, day)} checked={habitLogs && habitLogs.some(log => log.habit_id === h.id && log.date === day && log.status === 1)} className={`w-5 h-5 rounded bg-black/40 border border-white/20 checked:border-transparent appearance-none cursor-pointer transition-all flex items-center justify-center checked:after:content-['✓'] checked:after:text-white checked:after:text-sm ${isPos ? 'checked:bg-green-500' : 'checked:bg-red-500'}`} /></td>
+                                                <td key={dIdx} className="p-4 text-center"><input type="checkbox" onChange={() => toggleLog(h.id, day)} checked={habitLogs && habitLogs.some(log => log.habit_id === h.id && log.date === day && log.status === 1)} className={`w-5 h-5 rounded bg-black/40 border border-white/20 checked:border-transparent appearance-none cursor-pointer transition-all flex items-center justify-center checked:after:content-['\\2713'] checked:after:text-white checked:after:text-sm ${isPos ? 'checked:bg-green-500' : 'checked:bg-red-500'}`} /></td>
                                             ))}
                                             <td className="p-4 text-center"><i onClick={() => setEditingId(h.id)} className="fas fa-edit text-yellow-400 cursor-pointer mx-2 hover:scale-110"></i><i onClick={() => handleAction('delete', h.id)} className="fas fa-trash text-red-400 cursor-pointer mx-2 hover:scale-110"></i></td>
                                         </tr>
