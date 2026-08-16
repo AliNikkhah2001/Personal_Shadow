@@ -105,9 +105,10 @@ class SyncManager(QObject):
             return False, f"Failed to setup repo after {_retries} attempts"
         os.environ["GIT_TERMINAL_PROMPT"] = "0"
         url = self.repo_url
-        if not url.startswith("https://") and not url.startswith("http://"):
+        # Support file://, ssh://, git://, http://, https:// URLs
+        if not (url.startswith("https://") or url.startswith("http://") or url.startswith("file://") or url.startswith("ssh://") or url.startswith("git://") or "@" in url):
             url = "https://" + url
-        if self.token:
+        if self.token and url.startswith("https://"):
             url = url.replace("https://", f"https://{self.token}@")
 
         import subprocess
