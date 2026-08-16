@@ -258,7 +258,37 @@
                             if(success) {
                                 py.request(JSON.stringify({action: 'init'})).then(res => {
                                     const data = JSON.parse(res);
-                                    if(data.activity_logs) setActivityLogs(data.activity_logs);
+                                    if (data.courses) setCourses(data.courses);
+                                    if (data.goals) setGoals(data.goals);
+                                    if (data.flat_goals) setFlatGoals(data.flat_goals);
+                                    if (data.heatmap) setHeatmap(data.heatmap);
+                                    setSettings(prev => ({...prev, ...data.settings}));
+                                    if (data.activity_logs) setActivityLogs(data.activity_logs);
+                                    if (data.habits) setHabits(data.habits);
+                                    if (data.habit_logs) setHabitLogs(data.habit_logs);
+                                    if (data.flashcards) setFlashcards(data.flashcards);
+                                    if (data.quizzes) setQuizzes(data.quizzes);
+                                    if (data.queue) setQueue(data.queue);
+                                    if (data.notes) setNotes(data.notes);
+                                    if (data.course_colors) setCourseColors(data.course_colors);
+                                    if (data.metrics_data) setMetrics(data.metrics_data);
+                                    if (data.studied_hours) setStudiedHours(data.studied_hours);
+                                    if (data.health_profile) {
+                                        setHealthProfile(data.health_profile);
+                                        setSettings(prev => ({
+                                            ...prev,
+                                            health_age: data.health_profile.age || prev.health_age,
+                                            health_height: data.health_profile.height || prev.health_height,
+                                            health_weight: data.health_profile.weight || prev.health_weight,
+                                            health_gender: data.health_profile.gender || prev.health_gender,
+                                            health_activity: data.health_profile.activity || prev.health_activity,
+                                            health_deficit: data.health_profile.deficit_goal || prev.health_deficit
+                                        });
+                                    }
+                                    if (data.health_logs) setHealthLogs(data.health_logs);
+                                    if (data.custom_foods) setCustomFoods(data.custom_foods);
+                                    if (data.custom_activities) setCustomActivities(data.custom_activities);
+                                    if (data.health_plans) setHealthPlans(data.health_plans);
                                 });
                             }
                         });

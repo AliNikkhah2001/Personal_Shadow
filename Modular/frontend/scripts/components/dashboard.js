@@ -166,17 +166,56 @@
             );
         };
 
-        const DashboardHabitWidget = ({ habits, habitLogs }) => {
+        const formatDate = (date) => date.toISOString().split('T')[0];
+
+const parseBackendDate = (str) => {
+    const match = str.match(/(\d+)\/(\d+)/);
+    if (match) {
+        const month = parseInt(match[1], 10) - 1;
+        const day = parseInt(match[2], 10);
+        const year = new Date().getFullYear();
+        return formatDate(new Date(year, month, day));
+    }
+    const d = new Date(str);
+    return isNaN(d.getTime()) ? str : formatDate(d);
+};
+
+const DashboardHabitWidget = ({ habits, habitLogs }) => {
+            const days = []; const today = new Date();
+            for (let i = 6; i >= 0; i--) { 
+                const date = new Date(today); 
+                date.setDate(date.getDate() - i); 
+                days.push(formatDate(date));
+            }
+
+            const normalizedHabitLogs = React.useMemo(() => {
+                return (habitLogs || []).map(log => ({...log, normDate: parseBackendDate(log.date)}));
+            }, [habitLogs]);
+
+            const calculateStreak = (habitId) => {
+                if (!normalizedHabitLogs.length) return 0;
+                const logs = normalizedHabitLogs.filter(log => log.habit_id === habitId).sort((a, b) => a.normDate.localeCompare(b.normDate));
+                if (!logs.length) return 0;
+                let streak = 0;
+                for (let i = 0; i < days.length; i++) {
+                    const log = logs.find(l => l.normDate === days[i]);
+                    if (log && log.status === 1) streak++;
+                    else if (i > 0 && (!log || log.status === 0)) break;
+                }
+                return streak;
+            };
+
             return (
                 <div className="p-4 h-full flex flex-col w-full overflow-y-auto">
                     <h3 className="text-gray-300 font-bold uppercase tracking-widest text-sm border-b border-white/10 pb-2 mb-4">Habit Streaks</h3>
                     <div className="flex flex-col gap-2">
                         {habits && habits.map(h => {
                             const isPos = h.type === 'Positive';
+                            const streak = calculateStreak(h.id);
                             return (
                                 <div key={h.id} className="flex justify-between items-center p-2 bg-white/5 rounded border border-white/5">
                                     <span className={`text-xs font-bold ${isPos ? 'text-green-400' : 'text-red-400'}`}>{h.name}</span>
-                                    <span className="text-[10px] font-mono text-gray-400">Streak: Active</span>
+                                    <span className="text-[10px] font-mono text-gray-400">{streak > 0 ? `${streak}d streak` : 'No streak'}</span>
                                 </div>
                             );
                         })}

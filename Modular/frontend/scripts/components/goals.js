@@ -1,4 +1,32 @@
-        const LifeArchitectureView = ({ goals, backend, refreshGoals, courseColors, studiedHours }) => {
+        const formatDate = (date) => date.toISOString().split('T')[0];
+
+const parseBackendDate = (str) => {
+    const match = str.match(/(\d+)\/(\d+)/);
+    if (match) {
+        const month = parseInt(match[1], 10) - 1;
+        const day = parseInt(match[2], 10);
+        const year = new Date().getFullYear();
+        return formatDate(new Date(year, month, day));
+    }
+    const d = new Date(str);
+    return isNaN(d.getTime()) ? str : formatDate(d);
+};
+
+        const formatDate = (date) => date.toISOString().split('T')[0];
+
+const parseBackendDate = (str) => {
+    const match = str.match(/(\d+)\/(\d+)/);
+    if (match) {
+        const month = parseInt(match[1], 10) - 1;
+        const day = parseInt(match[2], 10);
+        const year = new Date().getFullYear();
+        return formatDate(new Date(year, month, day));
+    }
+    const d = new Date(str);
+    return isNaN(d.getTime()) ? str : formatDate(d);
+};
+
+const LifeArchitectureView = ({ goals, backend, refreshGoals, courseColors, studiedHours }) => {
             const [title, setTitle] = useState(""); const [target, setTarget] = useState(""); const [parent, setParent] = useState(""); const [deadline, setDeadline] = useState(new Date(new Date().getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16));
 
             const addGoal = () => { backend.request(JSON.stringify({action: 'manage_goal', sub: 'add', title: title, target_hours: target, parent_id: parent || null, deadline: deadline.replace('T', ' ')})).then(res => { refreshGoals(JSON.parse(res)); setTitle(""); setTarget(""); }); };
@@ -60,18 +88,41 @@
             );
         };
 
-        const HabitMatrixView = ({ habits, backend, refreshHabits, habitLogs, setHabitLogs }) => {
+        const formatDate = (date) => date.toISOString().split('T')[0];
+
+const parseBackendDate = (str) => {
+    const match = str.match(/(\d+)\/(\d+)/);
+    if (match) {
+        const month = parseInt(match[1], 10) - 1;
+        const day = parseInt(match[2], 10);
+        const year = new Date().getFullYear();
+        return formatDate(new Date(year, month, day));
+    }
+    const d = new Date(str);
+    return isNaN(d.getTime()) ? str : formatDate(d);
+};
+
+const HabitMatrixView = ({ habits, backend, refreshHabits, habitLogs, setHabitLogs }) => {
             const [newName, setNewName] = useState(""); const [newType, setNewType] = useState("Positive"); const [editingId, setEditingId] = useState(null);
-            const days = []; const today = new Date();
-            for (let i = 6; i >= 0; i--) { const date = new Date(today); date.setDate(date.getDate() - i); days.push(date.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' })); }
+            const days = []; const dayLabels = []; const today = new Date();
+            for (let i = 6; i >= 0; i--) { 
+                const date = new Date(today); 
+                date.setDate(date.getDate() - i); 
+                days.push(formatDate(date));
+                dayLabels.push(date.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' }));
+            }
+
+            const normalizedHabitLogs = React.useMemo(() => {
+                return (habitLogs || []).map(log => ({...log, normDate: parseBackendDate(log.date)}));
+            }, [habitLogs]);
 
             const calculateStreak = (habitId) => {
-                if (!habitLogs || habitLogs.length === 0) return 0;
-                const logs = habitLogs.filter(log => log.habit_id === habitId).sort((a, b) => new Date(a.date) - new Date(b.date));
-                if (logs.length === 0) return 0;
+                if (!normalizedHabitLogs.length) return 0;
+                const logs = normalizedHabitLogs.filter(log => log.habit_id === habitId).sort((a, b) => a.normDate.localeCompare(b.normDate));
+                if (!logs.length) return 0;
                 let streak = 0;
                 for (let i = 0; i < days.length; i++) {
-                    const log = logs.find(l => l.date === days[i]);
+                    const log = logs.find(l => l.normDate === days[i]);
                     if (log && log.status === 1) streak++;
                     else if (i > 0 && (!log || log.status === 0)) break;
                 }
@@ -84,8 +135,9 @@
                 });
             };
 
-            const toggleLog = (hid, dateStr) => {
-                const logExists = habitLogs && habitLogs.some(log => log.habit_id === hid && log.date === dateStr);
+            const toggleLog = (hid, dateIdx) => {
+                const dateStr = days[dateIdx];
+                const logExists = normalizedHabitLogs.some(log => log.habit_id === hid && log.normDate === dateStr);
                 const currentStatus = logExists ? 1 : 0; const newStatus = currentStatus === 1 ? 0 : 1;
                 backend.request(JSON.stringify({action: 'manage_habit', sub: 'toggle_log', habit_id: hid, date: dateStr, status: newStatus})).then(res => {
                     const data = JSON.parse(res); if (data.habits) refreshHabits(data.habits); if (data.habit_logs) setHabitLogs(data.habit_logs);
@@ -107,7 +159,7 @@
                                     <th className="p-4 text-xs font-bold text-gray-400 uppercase w-12 text-center">#</th>
                                     <th className="p-4 text-xs font-bold text-gray-400 uppercase">Habit</th>
                                     <th className="p-4 text-xs font-bold text-gray-400 uppercase text-center">Streak</th>
-                                    {days.map(day => (<th key={day} className="p-4 text-[10px] font-bold text-gray-400 uppercase text-center whitespace-nowrap">{day}</th>))}
+                                    {dayLabels.map((day, idx) => (<th key={idx} className="p-4 text-[10px] font-bold text-gray-400 uppercase text-center whitespace-nowrap">{day}</th>))}
                                     <th className="p-4 text-[10px] font-bold text-gray-400 uppercase text-center">Actions</th>
                                 </tr>
                             </thead>
@@ -122,7 +174,7 @@
                                             </td>
                                             <td className="p-4 text-xs font-mono text-blue-400 text-center font-bold">{streak > 0 ? `${streak}d` : '\u2014'}</td>
                                             {days.map((day, dIdx) => (
-                                                <td key={dIdx} className="p-4 text-center"><input type="checkbox" onChange={() => toggleLog(h.id, day)} checked={habitLogs && habitLogs.some(log => log.habit_id === h.id && log.date === day && log.status === 1)} className={`w-5 h-5 rounded bg-black/40 border border-white/20 checked:border-transparent appearance-none cursor-pointer transition-all flex items-center justify-center checked:after:content-['\\2713'] checked:after:text-white checked:after:text-sm ${isPos ? 'checked:bg-green-500' : 'checked:bg-red-500'}`} /></td>
+                                                <td key={dIdx} className="p-4 text-center"><input type="checkbox" onChange={() => toggleLog(h.id, dIdx)} checked={normalizedHabitLogs.some(log => log.habit_id === h.id && log.normDate === day && log.status === 1)} className={`w-5 h-5 rounded bg-black/40 border border-white/20 checked:border-transparent appearance-none cursor-pointer transition-all flex items-center justify-center checked:after:content-['\\2713'] checked:after:text-white checked:after:text-sm ${isPos ? 'checked:bg-green-500' : 'checked:bg-red-500'}`} /></td>
                                             ))}
                                             <td className="p-4 text-center"><i onClick={() => setEditingId(h.id)} className="fas fa-edit text-yellow-400 cursor-pointer mx-2 hover:scale-110"></i><i onClick={() => handleAction('delete', h.id)} className="fas fa-trash text-red-400 cursor-pointer mx-2 hover:scale-110"></i></td>
                                         </tr>
