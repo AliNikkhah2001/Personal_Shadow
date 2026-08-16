@@ -533,7 +533,8 @@
             );
         };
 
-        const PomodoroMiniWidget = ({ timerState }) => {
+        const PomodoroMiniWidget = () => {
+            const timerState = useTimerState();
             const isRunning = timerState?.is_running;
             const timeStr = timerState?.time_str || '25:00';
             const progress = timerState?.progress || 0;
@@ -623,7 +624,7 @@
         };
 
 
-        const DashboardView = ({ layout, setLayout, goals, isEditingLayout, setIsEditingLayout, heatmap, habits, habitLogs, metrics, backend, refreshGoals, healthProfile, healthLogs, studiedHours, courseColors, dailyMetrics, setDailyMetrics, correlations, insights, activityLogs, todaySessions, flatGoals, timerState }) => {
+        const DashboardView = ({ layout, setLayout, goals, isEditingLayout, setIsEditingLayout, heatmap, habits, habitLogs, metrics, backend, refreshGoals, healthProfile, healthLogs, studiedHours, courseColors, dailyMetrics, setDailyMetrics, correlations, insights, activityLogs, todaySessions, flatGoals }) => {
             const GRID_COLS = 4;
             const MIN_COL_PX = 250;
             const MIN_ROW_PX = 280;
@@ -718,7 +719,7 @@
                     case 'CorrelationCharts': return <CorrelationChartsWidget backend={backend} correlations={correlations} insights={insights} />;
                     case 'StudyStreak': return <StudyStreakWidget todaySessions={todaySessions} metrics={metrics} />;
                     case 'BestHours': return <BestHoursWidget todaySessions={todaySessions} />;
-                    case 'PomodoroMini': return <PomodoroMiniWidget timerState={timerState} />;
+                    case 'PomodoroMini': return <PomodoroMiniWidget />;
                     case 'WeeklyGoalBreakdown': return <WeeklyGoalBreakdownWidget backend={backend} goals={goals} />;
                     default: return null;
                 }

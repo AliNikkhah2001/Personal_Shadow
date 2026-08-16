@@ -1,4 +1,5 @@
-const ProductivityHubView = ({ backend, timerState, flatGoals, queue, refreshQueue, settings, todaySessions, courseColors }) => {
+const ProductivityHubView = ({ backend, flatGoals, queue, refreshQueue, settings, todaySessions, courseColors }) => {
+            const timerState = useTimerState();
             const [dur, setDur] = useState(25); const [crs, setCrs] = useState(""); const [type, setType] = useState("Work");
             const [editingId, setEditingId] = useState(null); const [activeTab, setActiveTab] = useState("timeline");
             const [showProcessList, setShowProcessList] = useState(false); const [selectedProcesses, setSelectedProcesses] = useState([]);

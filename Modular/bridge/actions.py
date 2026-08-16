@@ -198,7 +198,7 @@ class DashboardActionsMixin:
                 for r in db.c.fetchall()
             ]
 
-            studied = self.get_studied_hours_per_goal(date_filter=today_str)
+            studied = self.get_studied_hours_per_goal()
 
             return json.dumps({"today_sessions": today_sessions, "studied_hours": studied})
         except Exception:

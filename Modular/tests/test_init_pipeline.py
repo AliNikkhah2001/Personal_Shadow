@@ -180,6 +180,17 @@ class TestPerGoalStudiedHours(TestDonorDb):
         self.assertEqual(data["studied_hours"]["Unrelated Course"], 0.5)
         self.assertEqual(data["studied_hours"]["Apex"], 3.0)
 
+    def test_get_today_data_returns_all_time_studied_hours(self):
+        """Regression: the frontend overwrites its studied_hours state with
+        whatever get_today_data returns, so that payload must also be all-time.
+        A session logged YESTERDAY must still count toward goal progress today."""
+        resp = self.bridge._handle_get_today_data({})
+        data = json.loads(resp)
+        self.assertEqual(data["studied_hours"]["Sub Goal"], 2.0)
+        self.assertEqual(data["studied_hours"]["Unrelated Course"], 0.5)
+        self.assertEqual(data["studied_hours"]["Apex"], 3.0)
+        self.assertIn("today_sessions", data)
+
 
 class TestHeatmapTimeBuckets(TestDonorDb):
     """Time-based: heatmap cell intensity scales with hours logged on a day."""

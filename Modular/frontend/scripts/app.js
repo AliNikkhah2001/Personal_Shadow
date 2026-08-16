@@ -16,6 +16,21 @@
             return feed;
         };
 
+        /* Timer feed pub/sub: the once-per-second pomodoro state signal drives
+           ONLY the widgets that render live timer state (mini widget + hub),
+           instead of re-rendering the whole App tree on every tick. */
+        const DEFAULT_TIMER_STATE = { is_running: false, time_str: "00:00", progress: 0, distractions: 0, course: "General", active_queue_id: null, total_time: 1500, time_left: 1500, distraction_markers: [], distraction_log: [] };
+        let timerSubs = new Set();
+        let lastTimerState = DEFAULT_TIMER_STATE;
+        let lastQueueJson = null;
+        const subscribeTimer = (fn) => { timerSubs.add(fn); return () => timerSubs.delete(fn); };
+        const publishTimer = (state) => { lastTimerState = state; timerSubs.forEach(fn => fn(state)); };
+        const useTimerState = () => {
+            const [timer, setTimer] = useState(lastTimerState);
+            useEffect(() => subscribeTimer(setTimer), []);
+            return timer;
+        };
+
         const DEFAULT_LAYOUT = [
             { id: 'pomodoro_mini', type: 'PomodoroMini', size: 'quarter', visible: true, order: 0 },
             { id: 'clock', type: 'Clock', size: 'quarter', visible: true, order: 1 },
@@ -77,7 +92,6 @@
             const [layout, setLayout] = useState(DEFAULT_LAYOUT);
             const [isEditingLayout, setIsEditingLayout] = useState(false);
             
-            const [timerState, setTimerState] = useState({ is_running: false, time_str: "25:00", progress: 0, distractions: 0, course: "General", active_queue_id: null, total_time: 1500, time_left: 1500, distraction_markers: [] });
             const [todaySessions, setTodaySessions] = useState([]);
             const [studiedHours, setStudiedHours] = useState({});
             const [showScanModal, setShowScanModal] = useState(false);
@@ -175,19 +189,23 @@
                         
                         py.state_update.connect((state_json) => { 
                             const state = JSON.parse(state_json);
-                            setTimerState(prev => {
-                                if (prev.is_running && !state.is_running) {
-                                    setTimeout(() => {
-                                        py.request(JSON.stringify({action: 'get_today_data'})).then(r => {
-                                            const d = JSON.parse(r);
-                                            if (d.today_sessions) setTodaySessions(d.today_sessions);
-                                            if (d.studied_hours) setStudiedHours(d.studied_hours);
-                                        });
-                                    }, 500);
+                            if (lastTimerState.is_running && !state.is_running) {
+                                setTimeout(() => {
+                                    py.request(JSON.stringify({action: 'get_today_data'})).then(r => {
+                                        const d = JSON.parse(r);
+                                        if (d.today_sessions) setTodaySessions(d.today_sessions);
+                                        if (d.studied_hours) setStudiedHours(d.studied_hours);
+                                    });
+                                }, 500);
+                            }
+                            publishTimer(state);
+                            if (state.queue) {
+                                const qJson = JSON.stringify(state.queue);
+                                if (qJson !== lastQueueJson) {
+                                    lastQueueJson = qJson;
+                                    setQueue(state.queue);
                                 }
-                                return state;
-                            }); 
-                            if (state.queue) setQueue(state.queue);
+                            }
                         });
                         
                         py.video_feed.connect((b64) => { 
@@ -354,9 +372,9 @@
             
             const renderContent = () => {
                 switch(currentView) {
-                    case 'dashboard': return <DashboardView layout={layout} setLayout={setLayout} goals={goals} isEditingLayout={isEditingLayout} setIsEditingLayout={setIsEditingLayout} heatmap={heatmap} habits={habits} habitLogs={habitLogs} metrics={metrics} backend={backend} refreshGoals={refreshGoals} healthProfile={healthProfile} healthLogs={healthLogs} studiedHours={studiedHours} courseColors={courseColors} dailyMetrics={dailyMetrics} setDailyMetrics={setDailyMetrics} correlations={correlations} insights={insights} activityLogs={activityLogs} todaySessions={todaySessions} flatGoals={flatGoals} timerState={timerState} />;
+                    case 'dashboard': return <DashboardView layout={layout} setLayout={setLayout} goals={goals} isEditingLayout={isEditingLayout} setIsEditingLayout={setIsEditingLayout} heatmap={heatmap} habits={habits} habitLogs={habitLogs} metrics={metrics} backend={backend} refreshGoals={refreshGoals} healthProfile={healthProfile} healthLogs={healthLogs} studiedHours={studiedHours} courseColors={courseColors} dailyMetrics={dailyMetrics} setDailyMetrics={setDailyMetrics} correlations={correlations} insights={insights} activityLogs={activityLogs} todaySessions={todaySessions} flatGoals={flatGoals} />;
                     case 'health': return <HealthFitnessView backend={backend} healthProfile={healthProfile} setHealthProfile={setHealthProfile} healthLogs={healthLogs} setHealthLogs={setHealthLogs} customFoods={customFoods} customActivities={customActivities} healthPlans={healthPlans} ingredients={ingredients} setIngredients={setIngredients} compositeFoods={compositeFoods} setCompositeFoods={setCompositeFoods} onScanParsed={(data) => { setScanEditData(data); setShowScanModal(true); }} />;
-                    case 'hub': return <ProductivityHubView backend={backend} timerState={timerState} flatGoals={flatGoals} queue={queue} refreshQueue={setQueue} settings={settings} todaySessions={todaySessions} courseColors={courseColors} />;
+                    case 'hub': return <ProductivityHubView backend={backend} flatGoals={flatGoals} queue={queue} refreshQueue={setQueue} settings={settings} todaySessions={todaySessions} courseColors={courseColors} />;
                     case 'architecture': return <LifeArchitectureView goals={goals} backend={backend} refreshGoals={(d) => {setGoals(d.goals); setFlatGoals(d.flat_goals);}} courseColors={courseColors} studiedHours={studiedHours} />;
                     case 'habits': return <HabitMatrixView habits={habits} backend={backend} refreshHabits={setHabits} habitLogs={habitLogs} setHabitLogs={setHabitLogs} />;
                     case 'summary': return <DaySummaryView metrics={metrics} />;
