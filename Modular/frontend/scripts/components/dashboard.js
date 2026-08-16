@@ -1,3 +1,8 @@
+        const ClockWidget = () => {
+            const feed = useClockFeed();
+            return <div className="flex flex-col items-center justify-center h-full p-4 w-full">{feed ? <img src={feed} className="w-56 h-56 drop-shadow-2xl object-contain" /> : <div className="text-gray-500">Loading Horology...</div>}</div>;
+        };
+
         const NativeGitHubMatrix = ({ heatmap }) => {
             const matrix = heatmap && heatmap.length > 0 ? heatmap : Array.from({ length: 28 }, () => Array(7).fill(0));
             const getColor = (val) => {
@@ -608,7 +613,7 @@
         };
 
 
-        const DashboardView = ({ layout, setLayout, goals, isEditingLayout, setIsEditingLayout, clockFeed, heatmap, habits, habitLogs, metrics, backend, refreshGoals, healthProfile, healthLogs, studiedHours, courseColors, dailyMetrics, setDailyMetrics, correlations, insights, activityLogs, todaySessions, flatGoals, timerState }) => {
+        const DashboardView = ({ layout, setLayout, goals, isEditingLayout, setIsEditingLayout, heatmap, habits, habitLogs, metrics, backend, refreshGoals, healthProfile, healthLogs, studiedHours, courseColors, dailyMetrics, setDailyMetrics, correlations, insights, activityLogs, todaySessions, flatGoals, timerState }) => {
             const GRID_COLS = 4;
             const MIN_COL_PX = 250;
             const MIN_ROW_PX = 280;
@@ -687,7 +692,7 @@
 
             const renderWidget = (widget) => {
                 switch(widget.type) {
-                    case 'Clock': return <div className="flex flex-col items-center justify-center h-full p-4 w-full">{clockFeed ? <img src={clockFeed} className="w-56 h-56 drop-shadow-2xl object-contain" /> : <div className="text-gray-500">Loading Horology...</div>}</div>;
+                    case 'Clock': return <ClockWidget />;
                     case 'Calendar': return <DualCalendar backend={backend} refreshGoals={refreshGoals} goals={goals} />;
                     case 'GlobalTargets': return <GlobalTargets metrics={metrics} />;
                     case 'GitHubMatrix': return <NativeGitHubMatrix heatmap={heatmap} />;

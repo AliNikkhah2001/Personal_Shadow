@@ -1,5 +1,21 @@
 ﻿        const { useState, useEffect, useMemo, useRef, useCallback } = React;
 
+        /* Clock feed pub/sub: keeps the once-per-second QWebChannel clock
+           signal from re-rendering the entire App tree. Widgets subscribe
+           through subscribeClock / useClockFeed instead of App state. */
+        const clockFeedSubs = new Set();
+        let lastClockFeed = null;
+        const subscribeClock = (fn) => { clockFeedSubs.add(fn); return () => clockFeedSubs.delete(fn); };
+        const publishClock = (b64) => {
+            lastClockFeed = b64;
+            clockFeedSubs.forEach(fn => fn(b64));
+        };
+        const useClockFeed = () => {
+            const [feed, setFeed] = useState(lastClockFeed);
+            useEffect(() => subscribeClock(setFeed), []);
+            return feed;
+        };
+
         const DEFAULT_LAYOUT = [
             { id: 'pomodoro_mini', type: 'PomodoroMini', size: 'quarter', visible: true, order: 0 },
             { id: 'clock', type: 'Clock', size: 'quarter', visible: true, order: 1 },
@@ -62,7 +78,6 @@
             const [isEditingLayout, setIsEditingLayout] = useState(false);
             
             const [timerState, setTimerState] = useState({ is_running: false, time_str: "25:00", progress: 0, distractions: 0, course: "General", active_queue_id: null, total_time: 1500, time_left: 1500, distraction_markers: [] });
-            const [clockFeed, setClockFeed] = useState(null);   
             const [todaySessions, setTodaySessions] = useState([]);
             const [studiedHours, setStudiedHours] = useState({});
             const [showScanModal, setShowScanModal] = useState(false);
@@ -185,7 +200,7 @@
                             }
                         });
                         
-                        py.clock_feed.connect((b64) => { setClockFeed(b64); });
+                        py.clock_feed.connect((b64) => { publishClock(b64); });
                         py.scan_ready.connect((json_str) => {
                             const data = JSON.parse(json_str);
                             setScanEditData(data);
@@ -339,7 +354,7 @@
             
             const renderContent = () => {
                 switch(currentView) {
-                    case 'dashboard': return <DashboardView layout={layout} setLayout={setLayout} goals={goals} isEditingLayout={isEditingLayout} setIsEditingLayout={setIsEditingLayout} clockFeed={clockFeed} heatmap={heatmap} habits={habits} habitLogs={habitLogs} metrics={metrics} backend={backend} refreshGoals={refreshGoals} healthProfile={healthProfile} healthLogs={healthLogs} studiedHours={studiedHours} courseColors={courseColors} dailyMetrics={dailyMetrics} setDailyMetrics={setDailyMetrics} correlations={correlations} insights={insights} activityLogs={activityLogs} todaySessions={todaySessions} flatGoals={flatGoals} timerState={timerState} />;
+                    case 'dashboard': return <DashboardView layout={layout} setLayout={setLayout} goals={goals} isEditingLayout={isEditingLayout} setIsEditingLayout={setIsEditingLayout} heatmap={heatmap} habits={habits} habitLogs={habitLogs} metrics={metrics} backend={backend} refreshGoals={refreshGoals} healthProfile={healthProfile} healthLogs={healthLogs} studiedHours={studiedHours} courseColors={courseColors} dailyMetrics={dailyMetrics} setDailyMetrics={setDailyMetrics} correlations={correlations} insights={insights} activityLogs={activityLogs} todaySessions={todaySessions} flatGoals={flatGoals} timerState={timerState} />;
                     case 'health': return <HealthFitnessView backend={backend} healthProfile={healthProfile} setHealthProfile={setHealthProfile} healthLogs={healthLogs} setHealthLogs={setHealthLogs} customFoods={customFoods} customActivities={customActivities} healthPlans={healthPlans} ingredients={ingredients} setIngredients={setIngredients} compositeFoods={compositeFoods} setCompositeFoods={setCompositeFoods} onScanParsed={(data) => { setScanEditData(data); setShowScanModal(true); }} />;
                     case 'hub': return <ProductivityHubView backend={backend} timerState={timerState} flatGoals={flatGoals} queue={queue} refreshQueue={setQueue} settings={settings} todaySessions={todaySessions} courseColors={courseColors} />;
                     case 'architecture': return <LifeArchitectureView goals={goals} backend={backend} refreshGoals={(d) => {setGoals(d.goals); setFlatGoals(d.flat_goals);}} courseColors={courseColors} studiedHours={studiedHours} />;
