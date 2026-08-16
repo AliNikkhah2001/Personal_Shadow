@@ -410,6 +410,9 @@ class SyncManager(QObject):
         manifest_path = os.path.join(shared_files_dir, f"_manifest_{self.device_id}.json")
 
         local_manifest = {}
+        lfs_files = []  # Track files that need LFS
+        LFS_THRESHOLD = 10 * 1024 * 1024  # 10MB threshold for LFS
+
         for local_path in local_paths:
             if not os.path.exists(local_path):
                 continue
@@ -420,6 +423,11 @@ class SyncManager(QObject):
                     src = os.path.join(root, f)
                     try:
                         stat = os.stat(src)
+                        # Track LFS candidates (files > 10MB)
+                        file_key = os.path.join(base_folder, rel_path, f) if rel_path != "." else os.path.join(base_folder, f)
+                        if stat.st_size > LFS_THRESHOLD:
+                            lfs_files.append(file_key)
+                        # Skip extremely large files (>100MB) to prevent issues
                         if stat.st_size > 100 * 1024 * 1024:
                             continue
                         if rel_path == ".":
@@ -483,6 +491,22 @@ class SyncManager(QObject):
                 except Exception:
                     pass
 
+        # Update .gitattributes for Git LFS
+        if lfs_files:
+            gitattributes_path = os.path.join(self.repo_path, ".gitattributes")
+            lfs_patterns = []
+            for f in lfs_files:
+                # Escape special characters for gitattributes
+                pattern = f.replace("[", "\\[").replace("]", "\\]").replace("*", "\\*")
+                lfs_patterns.append(f"{pattern} filter=lfs diff=lfs merge=lfs -text")
+            try:
+                with open(gitattributes_path, "w") as f:
+                    f.write("# Git LFS tracking\n")
+                    f.write("\n".join(lfs_patterns) + "\n")
+                self.repo.git.add(".gitattributes")
+            except Exception:
+                pass
+
         with open(manifest_path, "w") as f:
             json.dump(
                 {k: {"size": v["size"], "mtime": v["mtime"]} for k, v in local_manifest.items()},
@@ -490,7 +514,9 @@ class SyncManager(QObject):
             )
 
         self.sync_progress.emit(
-            f"Files: {new_files} new, {changed_files} changed, {deleted_files} deleted"
+            f"Files: {new_files} new, {changed_files} changed, {deleted_files} deleted" + (
+                f" + {len(lfs_files)} LFS" if lfs_files else ""
+            )
         )
 
     def get_network_folders(self):
