@@ -2,7 +2,7 @@
 
 A cross-platform productivity, deductive analytics, and 3D spatial knowledge management system.
 
-![Version](https://img.shields.io/badge/version-2.0.0--beta-blue)
+![Version](https://img.shields.io/badge/version-2.0.0-blue)
 ![Python](https://img.shields.io/badge/python-3.12+-green)
 ![React](https://img.shields.io/badge/react-18.0+-61dafb)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
@@ -10,6 +10,7 @@ A cross-platform productivity, deductive analytics, and 3D spatial knowledge man
 
 ## 📋 Table of Contents
 - [Overview](#-overview)
+- [Changelog](#-changelog)
 - [Architecture](#-architecture)
 - [Project Structure](#-project-structure)
 - [Current Features](#-current-features)
@@ -24,6 +25,28 @@ A cross-platform productivity, deductive analytics, and 3D spatial knowledge man
 The **Sherlock Holmes Mind Palace** is the ultimate convergence of a "Second Brain" and the "Method of Loci." Built with a lightning-fast **PyQt6** backend and a glassmorphism **React/JSX** frontend, it acts as a centralized operating system for your intellectual and physical life.
 
 It is designed to seamlessly track your focus, map your knowledge spatially, analyze your behavioral data deductively, and synchronize perfectly across all your devices using peer-to-peer GitHub node architectures.
+
+## 📝 Changelog
+
+### v2.0.0 — Steady State: Init, Goals, and Sync locked down
+This release consolidates the modular rewrite and the goal/sync feature trains into a single known-stable version.
+
+**Goal hours & progress (all-time, per-goal)**
+- `_handle_init` now returns **all-time studied hours per goal** (not today-only), so a session logged any day counts toward cumulative goal targets (`bridge/actions.py`).
+- Studied-hour aggregation fully supports **cascading goals**: child hours roll up into parents, and course names stored as full hierarchy paths (`"Work > Eco: Business Proposal"`) now count toward both the leaf goal and its parent (`bridge/runtime.py`).
+- Goal lookups in aggregation replaced linear re-scans with O(1) title→id / id→parent maps.
+- Dashboard goal charts (last-7-days progress + weekly breakdown) match sessions against a goal title **or any path segment** via the new `courseMatchesGoal` helper (`frontend/scripts/components/dashboard.js`).
+
+**Dashboard performance**
+- Removed the per-second clock-feed round trip that was re-rendering the whole app every tick; the analog clock now updates its hand via direct DOM mutation, cutting CPU/memory churn on the dashboard.
+
+**Init pipeline & data integrity**
+- End-to-end init handshake regression suite: goals, habits, habit logs, and the 28×7 heatmap return with **no `error` key**.
+- Time-based heatmap buckets verified under a frozen clock: intensity (0–4) scales with daily hours and lands in the correct day/week column.
+- New regression tests: hierarchy-path course → leaf + parent hours; all-time init payload hours.
+
+**Previous milestones already on `main`**
+- Modular handler architecture (10 handlers + core dispatcher), sync rewrite (sandboxed multi-device suite, force-sync, hard-clone), calorie/object/depth vision estimation (MiDaS + VLM downloaders), studiedHours 0% fix, grid dashboard with drag-and-drop widgets, and markdown/check-in overflow fixes.
 
 ## 🏗️ Architecture
 
@@ -53,7 +76,7 @@ It is designed to seamlessly track your focus, map your knowledge spatially, ana
 │    ▼                    ▼                    ▼                  │
 │ ┌──────────┐    ┌──────────────┐    ┌──────────────┐           │
 │ │ Handlers │    │ Core Modules │    │  UI Widgets  │           │
-│ │  (8)     │    │              │    │              │           │
+│ │  (11)    │    │              │    │              │           │
 │ │•Nutrition│    │•core_sys     │    │•overlay      │           │
 │ │•Health   │    │•core_logger  │    │•pdf_editor   │           │
 │ │•Habit    │    │•vision_track │    │•timelapse    │           │
@@ -62,6 +85,9 @@ It is designed to seamlessly track your focus, map your knowledge spatially, ana
 │ │•Note     │    │              │    │              │           │
 │ │•Queue    │    │              │    │              │           │
 │ │•Sync     │    │              │    │              │           │
+│ │•Analytics│    │              │    │              │           │
+│ │•FoodDet  │    │              │    │              │           │
+│ │•Wallpaper│    │              │    │              │           │
 │ └──────────┘    └──────────────┘    └──────────────┘           │
 │                                                                 │
 │              ┌──────────────┐                                   │
@@ -88,7 +114,10 @@ SystemBridge.request(payload)
     │      ├── GoalHandler.handle()      → manage_goal
     │      ├── NoteHandler.handle()      → manage_note
     │      ├── QueueHandler.handle()     → manage_queue
-    │      └── SyncHandler.handle()      → sync_now, hard_clone, force_sync
+    │      ├── SyncHandler.handle()      → sync_now, hard_clone, force_sync
+    │      ├── AnalyticsHandler.handle() → get_correlations, insights
+    │      ├── FoodDetectionHandler      → food detection, calorie vision
+    │      └── WallpaperHandler.handle() → save_wallpaper
     │
     └──► _core_action_handlers[action](req)
            │
@@ -114,6 +143,14 @@ Modular/
 ├── 📄 migrate_db.py                    # Database migration utility (53 lines)
 ├── 📄 library.py                       # PDF library widget (303 lines)
 ├── 📄 native_pdf_editor.py             # Standalone PDF editor (334 lines)
+│
+├── 📁 bridge/                         # Core dispatch + runtime services
+│   ├── __init__.py
+│   ├── actions.py                     # Init pipeline, history, heatmap export
+│   ├── runtime.py                     # Runtime services (heatmap, studied hours)
+│   ├── session.py                     # Session persistence
+│   ├── sync_data.py                   # Sync data export helpers
+│   └── media.py                       # Media handling helpers
 │
 ├── 📁 handlers/                        # Domain action handlers
 │   ├── __init__.py                     # Base ActionHandler class
@@ -152,10 +189,18 @@ Modular/
 │
 ├── 📁 tests/                           # Test suite
 │   ├── __init__.py
-│   └── test_backend.py                 # Backend tests (13 tests)
+│   ├── test_backend.py                 # Backend config/DB/dispatch tests (22)
+│   ├── test_init_pipeline.py           # End-to-end init + time-based heatmap suite (9)
+│   ├── test_startup.py                 # Startup integration smoke test
+│   ├── test_sync_sandboxed.py          # Sandboxed multi-device sync suite
+│   ├── test_sync_multi_machine.py      # Multi-machine sync scenarios
+│   └── test_runtime_features.py        # Food, blob, timer, wallpaper tests
 │
 ├── 📁 tools/                           # Utilities
-│   └── data_import.py                  # API data importer
+│   ├── data_import.py                  # API data importer
+│   ├── download_*.py                   # Model / dataset downloaders
+│   ├── evaluate_calorie_vision.py      # Calorie vision evaluation
+│   └── _run_sync_tests.py              # Sync suite runner (per-class timeouts)
 │
 ├── 📄 requirements.txt                 # Python dependencies
 ├── 📄 pyproject.toml                   # Ruff linter/formatter config
@@ -277,6 +322,7 @@ python -m ruff format .
 ```python
 from handlers import ActionHandler
 
+
 class MyNewHandler(ActionHandler):
     actions = {
         "my_action": "handle_my_action",
@@ -288,48 +334,60 @@ class MyNewHandler(ActionHandler):
 ```
 
 ### Database Schema
-SQLite database (`second_brain.db`) with 16+ tables:
+SQLite database (`second_brain.db`) with 22 tables:
 - `courses`, `pomodoro_sessions`, `cascading_goals`
 - `habits`, `habit_logs`, `flashcards`, `quizzes`
 - `notes`, `health_profile`, `health_logs`
 - `custom_foods`, `custom_activities`, `health_plans`
 - `ingredients`, `composite_foods`, `recipe_ingredients`
 - `focus_queue`, `activity_logs`, `deleted_uuids`
+- `food_logs`, `daily_metrics`, `wallpapers`
 
 ## 🧪 Testing
 
-```bash
-# Run all tests
-python tests/test_backend.py
+The suite uses `unittest` (no third-party runner required). Naming convention: `test_*.py` with classes.
 
-# Run with pytest (if installed)
-pytest tests/
+```bash
+# Core backend (config, DB, dispatch, timeline config)
+python -m unittest tests.test_backend
+
+# Init pipeline regression: the full init handshake (goals, habits, heatmap)
+# plus time-based heatmap/studied-hours logic with frozen clocks
+python -m unittest tests.test_init_pipeline
+
+# Startup integration smoke test (runs on import, asserts DB + 22 tables)
+python tests/test_startup.py
+
+# Runtime feature tests (food detection, sync blob encoding, timer tick,
+# wallpaper blob round-trip) — module-level test functions
+python tools/_run_sync_tests.py   # sync suite runner with per-class timeouts
 ```
 
 The test suite verifies:
-- All module imports work correctly
-- Database connections and queries
-- Configuration management
-- Handler dispatch pattern
+- **All module imports work correctly** (`test_startup.py`)
+- **Database connections, queries, config management, handler dispatch, timeline config** (`test_backend.py`)
+- **End-to-end init pipepline** — `_handle_init` returns goals, habits, habit_logs and a 28×7 heatmap with **no `error` key** (regression, `test_init_pipeline.py`)
+- **Time-based logic** — per-goal studied-hour aggregation rolls child goals into parents and honours `date_filter`; heatmap intensity (0–4) scales with daily hours and maps to the correct 28-day/week column using a frozen clock (`test_init_pipeline.py`)
+- **Multi-device sync** — sandboxed export/merge/conflict/deletion/settings/force-sync/hard-clone/edge cases, plus multi-machine timeline sync (`test_sync_sandboxed.py`, `test_sync_multi_machine.py`; run via `tools/_run_sync_tests.py` — real-git classes may hang on Windows)
 
 ## 🗺️ Roadmap
 
 ### Phase 1: Timeline & Hub Refinement
-- [ ] UI configuration for Timeline start/end hours
-- [ ] Wire past timeline sessions to fetch distraction data
+- [x] UI configuration for Timeline start/end hours
+- [x] Wire past timeline sessions to fetch distraction data
 - [ ] Trigger TimelapseDialog from timeline clicks
-- [ ] Visual "Planned vs. Actual" duration mapping
+- [x] Visual "Planned vs. Actual" duration mapping
 
 ### Phase 2: Advanced Nutrition & Fasting
-- [ ] Expand SQLite schema for ingredients/recipes
-- [ ] Python ingestion script for food datasets
-- [ ] Custom Recipe Builder UI
-- [ ] OpenCV calorie estimation from images
+- [x] Expand SQLite schema for ingredients/recipes
+- [x] Python ingestion script for food datasets
+- [x] Custom Recipe Builder UI
+- [x] OpenCV calorie estimation from images
 
 ### Phase 3: Behavioral Analytics
-- [ ] Daily Check-in modal (Sleep, Energy, Mood)
-- [ ] Pandas/NumPy correlation backend
-- [ ] Chart.js correlation graphs
+- [x] Daily Check-in modal (Sleep, Energy, Mood)
+- [x] Pandas/NumPy correlation backend
+- [x] Chart.js correlation graphs
 - [ ] Automated PDF Life Reports
 
 ### Phase 4: Visual Photo Diary
