@@ -326,6 +326,19 @@ class DashboardActionsMixin:
         self.log_activity("Settings", "Updated application settings via UI.")
         return json.dumps({"status": "saved"})
 
+    def _handle_dump_ui_state(self, req):
+        try:
+            fmt = "%Y%m%d_%H%M%S"
+            stamp = datetime.now().strftime(fmt)
+            out_dir = "ui_debug"
+            os.makedirs(out_dir, exist_ok=True)
+            path = os.path.join(out_dir, f"ui_state_{stamp}.json")
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(req.get("ui_state", {}), f, indent=2, ensure_ascii=False)
+            return json.dumps({"status": "saved", "path": path})
+        except Exception as e:
+            return json.dumps({"status": "error", "message": str(e)})
+
     def _handle_reset_data(self, req):
         tables_to_clear = [
             "courses",

@@ -237,6 +237,7 @@ class SystemBridge(
             "play_timelapse": self._handle_play_timelapse,
             "save_session_note": self._handle_save_session_note,
             "save_settings": self._handle_save_settings,
+            "dump_ui_state": self._handle_dump_ui_state,
             "save_file": self._handle_save_file,
             "get_device_id": self._handle_get_device_id,
             "set_vision_ui": self._handle_set_vision_ui,

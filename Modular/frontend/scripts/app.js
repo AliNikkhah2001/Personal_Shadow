@@ -106,6 +106,52 @@
                 }
             };
 
+            const dumpCurrentUiState = () => {
+                const state = {
+                    currentView,
+                    ts: new Date().toISOString(),
+                    goals: goals,
+                    flatGoals: flatGoals,
+                    habits: habits,
+                    habitLogs: habitLogs,
+                    studiedHours: studiedHours,
+                    metrics: metrics,
+                    activityLogsCount: activityLogs ? activityLogs.length : 0,
+                    todaySessionsCount: todaySessions ? todaySessions.length : 0,
+                    flashcardsCount: flashcards ? flashcards.length : 0,
+                    quizzesCount: quizzes ? quizzes.length : 0,
+                    queueCount: queue ? queue.length : 0,
+                    notesCount: notes ? notes.length : 0,
+                    health_logsCount: healthLogs ? healthLogs.length : 0,
+                    hasUiError: window.__uiError ? window.__uiError : null,
+                };
+                if (backend) {
+                    backend.request(JSON.stringify({action: 'dump_ui_state', ui_state: state})).then(res => {
+                        const data = JSON.parse(res);
+                        console.log('[ui-debug] UI state saved:', data.path || data.status);
+                    });
+                }
+                return state;
+            };
+            window.__dumpUiState = dumpCurrentUiState;
+            window.addEventListener('error', (e) => {
+                window.__uiError = e.message + ' @ ' + (e.filename || '') + ':' + (e.lineno || '');
+                console.log('[ui-debug] JS error captured:', window.__uiError);
+            });
+
+            useEffect(() => {
+                if (!backend) return;
+                console.log('[ui-debug] dumpUiState available: type window.__dumpUiState()');
+                const onKeyDown = (e) => {
+                    if (e.ctrlKey && e.shiftKey && (e.key === 'D' || e.key === 'd')) {
+                        e.preventDefault();
+                        window.__dumpUiState();
+                    }
+                };
+                window.addEventListener('keydown', onKeyDown);
+                return () => window.removeEventListener('keydown', onKeyDown);
+            }, [backend, currentView, goals, habits, studiedHours, metrics]);
+
             useEffect(() => {
                 if (typeof qt !== 'undefined') {
                     new QWebChannel(qt.webChannelTransport, (channel) => {

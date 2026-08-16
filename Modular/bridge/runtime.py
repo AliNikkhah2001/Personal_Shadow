@@ -279,12 +279,12 @@ class RuntimeServicesMixin:
 
             if date_filter:
                 db.c.execute(
-                    "SELECT course, sum(actual_duration) FROM pomodoro_sessions WHERE type='Work' AND date(timestamp)=?",
+                    "SELECT course, sum(actual_duration) FROM pomodoro_sessions WHERE type='Work' AND date(timestamp)=? GROUP BY course",
                     (date_filter,),
                 )
             else:
                 db.c.execute(
-                    "SELECT course, sum(actual_duration) FROM pomodoro_sessions WHERE type='Work'"
+                    "SELECT course, sum(actual_duration) FROM pomodoro_sessions WHERE type='Work' GROUP BY course"
                 )
             course_hours = {r[0]: (r[1] or 0) / 60.0 for r in db.c.fetchall()}
 
@@ -315,6 +315,8 @@ class RuntimeServicesMixin:
             return result
         except Exception:
             return {}
+
+    def get_heatmap_data(self):
         weeks = 28
         matrix = [[0] * 7 for _ in range(weeks)]
         td = datetime.now().date()
