@@ -269,9 +269,13 @@ class RuntimeServicesMixin:
             if not all_goals:
                 return {}
 
+            goal_by_title = {title: gid for gid, _pid, title in all_goals}
+            title_to_gid = goal_by_title
+            gid_to_parent = {gid: pid for gid, pid, _title in all_goals}
+
             children_map = {}
-            goal_titles = set()
             for gid, pid, title in all_goals:
+                goal_titles = set()
                 goal_titles.add(title)
                 if pid not in children_map:
                     children_map[pid] = []
@@ -292,24 +296,28 @@ class RuntimeServicesMixin:
                 titles = []
                 for child_title in children_map.get(parent_id, []):
                     titles.append(child_title)
-                    child_id = None
-                    for gid, pid, title in all_goals:
-                        if title == child_title:
-                            child_id = gid
-                            break
-                    if child_id:
+                    child_id = title_to_gid.get(child_title)
+                    if child_id is not None:
                         titles.extend(get_descendant_titles(child_id))
                 return titles
 
+            def hours_for_title(title):
+                total = 0.0
+                for course, hrs in course_hours.items():
+                    if course == title or course.endswith(" > " + title):
+                        total += hrs
+                return total
+
             result = {}
             for gid, pid, title in all_goals:
-                total = course_hours.get(title, 0)
+                total = hours_for_title(title)
                 for desc_title in get_descendant_titles(gid):
-                    total += course_hours.get(desc_title, 0)
+                    total += hours_for_title(desc_title)
                 result[title] = total
 
             for course_name, hours in course_hours.items():
-                if course_name not in result:
+                leaf = course_name.rsplit(" > ", 1)[-1]
+                if course_name not in result and leaf not in result:
                     result[course_name] = hours
 
             return result

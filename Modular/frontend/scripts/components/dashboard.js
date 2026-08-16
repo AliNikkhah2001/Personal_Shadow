@@ -3,6 +3,16 @@
             return <div className="flex flex-col items-center justify-center h-full p-4 w-full">{feed ? <img src={feed} className="w-56 h-56 drop-shadow-2xl object-contain" /> : <div className="text-gray-500">Loading Horology...</div>}</div>;
         };
 
+        /* A session course may be stored as a full hierarchy path
+           ("Work > Eco: Business Proposal") while goals are separate rows
+           ("Work", "Eco: Business Proposal"). Match either the exact goal
+           title or a path ending in that title. */
+        const courseMatchesGoal = (course, title) => {
+            if (!course) return false;
+            if (course === title) return true;
+            return course.split(' > ').includes(title);
+        };
+
         const NativeGitHubMatrix = ({ heatmap }) => {
             const matrix = heatmap && heatmap.length > 0 ? heatmap : Array.from({ length: 28 }, () => Array(7).fill(0));
             const getColor = (val) => {
@@ -283,7 +293,7 @@
                 const colors = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444'];
                 const datasets = topGoals.map((g, idx) => {
                     const dailyMins = last7.map(dateStr => {
-                        const sessions = timeData.filter(s => s.course === g.title && s.timestamp.split('T')[0] === dateStr && s.type === 'Work');
+                        const sessions = timeData.filter(s => courseMatchesGoal(s.course, g.title) && s.timestamp.split('T')[0] === dateStr && s.type === 'Work');
                         return sessions.reduce((sum, s) => sum + (s.actual_duration || s.duration || 0), 0) / 60;
                     });
                     return {
@@ -580,7 +590,7 @@
                 const colors = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#a855f7'];
                 const datasets = goalData.map((g, idx) => {
                     const dailyMins = last7.map(dateStr => {
-                        const sessions = weekData.filter(s => s.course === g.title && s.timestamp.split('T')[0] === dateStr && s.type === 'Work');
+                        const sessions = weekData.filter(s => courseMatchesGoal(s.course, g.title) && s.timestamp.split('T')[0] === dateStr && s.type === 'Work');
                         return sessions.reduce((sum, s) => sum + (s.actual_duration || s.duration || 0), 0) / 60;
                     });
                     return {

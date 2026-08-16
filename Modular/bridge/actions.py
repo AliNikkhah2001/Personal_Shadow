@@ -168,7 +168,7 @@ class DashboardActionsMixin:
                         "global_study_hours": global_study_hours,
                         "global_target_hours": global_target_hours,
                     },
-                    "studied_hours": self.get_studied_hours_per_goal(date_filter=today_str),
+                    "studied_hours": self.get_studied_hours_per_goal(),
                 }
             )
         except Exception as e:

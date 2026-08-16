@@ -158,6 +158,28 @@ class TestPerGoalStudiedHours(TestDonorDb):
         self.assertEqual(today_only["Apex"], 2.0)
         self.assertNotIn("Unrelated Course", today_only)
 
+    def test_hierarchy_path_course_counts_toward_leaf_and_parent(self):
+        """Regression: sessions are stored with a full ' > ' path while goals
+        are separate rows. A 'Work > Eco: Business Proposal' session must
+        count toward both the leaf goal and its parent."""
+        self.seed_goal("Root")
+        self.db.c.execute("SELECT id FROM cascading_goals WHERE title='Root'")
+        root_id = self.db.c.fetchone()[0]
+        self.seed_goal("Leaf", parent_id=root_id)
+        self.seed_session("Root > Leaf", 45, "2026-08-15 10:00:00")
+        result = self.bridge.get_studied_hours_per_goal()
+        self.assertEqual(result["Root"], 0.75)
+        self.assertEqual(result["Leaf"], 0.75)
+
+    def test_init_returns_all_time_studied_hours(self):
+        """Init payload studied_hours must be all-time (targets are cumulative),
+        so a session logged yesterday still counts toward goal progress."""
+        resp = self.bridge._handle_init({})
+        data = json.loads(resp)
+        self.assertEqual(data["studied_hours"]["Sub Goal"], 2.0)
+        self.assertEqual(data["studied_hours"]["Unrelated Course"], 0.5)
+        self.assertEqual(data["studied_hours"]["Apex"], 3.0)
+
 
 class TestHeatmapTimeBuckets(TestDonorDb):
     """Time-based: heatmap cell intensity scales with hours logged on a day."""

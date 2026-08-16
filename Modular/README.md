@@ -2,7 +2,7 @@
 
 A cross-platform productivity, deductive analytics, and 3D spatial knowledge management system.
 
-![Version](https://img.shields.io/badge/version-2.0.0--beta-blue)
+![Version](https://img.shields.io/badge/version-2.0.0-blue)
 ![Python](https://img.shields.io/badge/python-3.12+-green)
 ![React](https://img.shields.io/badge/react-18.0+-61dafb)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
@@ -10,6 +10,7 @@ A cross-platform productivity, deductive analytics, and 3D spatial knowledge man
 
 ## 📋 Table of Contents
 - [Overview](#-overview)
+- [Changelog](#-changelog)
 - [Architecture](#-architecture)
 - [Project Structure](#-project-structure)
 - [Current Features](#-current-features)
@@ -24,6 +25,28 @@ A cross-platform productivity, deductive analytics, and 3D spatial knowledge man
 The **Sherlock Holmes Mind Palace** is the ultimate convergence of a "Second Brain" and the "Method of Loci." Built with a lightning-fast **PyQt6** backend and a glassmorphism **React/JSX** frontend, it acts as a centralized operating system for your intellectual and physical life.
 
 It is designed to seamlessly track your focus, map your knowledge spatially, analyze your behavioral data deductively, and synchronize perfectly across all your devices using peer-to-peer GitHub node architectures.
+
+## 📝 Changelog
+
+### v2.0.0 — Steady State: Init, Goals, and Sync locked down
+This release consolidates the modular rewrite and the goal/sync feature trains into a single known-stable version.
+
+**Goal hours & progress (all-time, per-goal)**
+- `_handle_init` now returns **all-time studied hours per goal** (not today-only), so a session logged any day counts toward cumulative goal targets (`bridge/actions.py`).
+- Studied-hour aggregation fully supports **cascading goals**: child hours roll up into parents, and course names stored as full hierarchy paths (`"Work > Eco: Business Proposal"`) now count toward both the leaf goal and its parent (`bridge/runtime.py`).
+- Goal lookups in aggregation replaced linear re-scans with O(1) title→id / id→parent maps.
+- Dashboard goal charts (last-7-days progress + weekly breakdown) match sessions against a goal title **or any path segment** via the new `courseMatchesGoal` helper (`frontend/scripts/components/dashboard.js`).
+
+**Dashboard performance**
+- Removed the per-second clock-feed round trip that was re-rendering the whole app every tick; the analog clock now updates its hand via direct DOM mutation, cutting CPU/memory churn on the dashboard.
+
+**Init pipeline & data integrity**
+- End-to-end init handshake regression suite: goals, habits, habit logs, and the 28×7 heatmap return with **no `error` key**.
+- Time-based heatmap buckets verified under a frozen clock: intensity (0–4) scales with daily hours and lands in the correct day/week column.
+- New regression tests: hierarchy-path course → leaf + parent hours; all-time init payload hours.
+
+**Previous milestones already on `main`**
+- Modular handler architecture (10 handlers + core dispatcher), sync rewrite (sandboxed multi-device suite, force-sync, hard-clone), calorie/object/depth vision estimation (MiDaS + VLM downloaders), studiedHours 0% fix, grid dashboard with drag-and-drop widgets, and markdown/check-in overflow fixes.
 
 ## 🏗️ Architecture
 
