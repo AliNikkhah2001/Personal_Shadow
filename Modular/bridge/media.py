@@ -187,11 +187,14 @@ class MediaActionsMixin:
         filename = req.get("filename")
         path = os.path.join(self.lib_path, filename)
         if os.path.exists(path):
-            if self.active_pdf:
-                self.active_pdf.close()
-            self.active_pdf = pymupdf.open(path)
-            self.active_pdf_name = filename
-            return json.dumps({"status": "ok", "total_pages": len(self.active_pdf)})
+            try:
+                if self.active_pdf:
+                    self.active_pdf.close()
+                self.active_pdf = pymupdf.open(path)
+                self.active_pdf_name = filename
+                return json.dumps({"status": "ok", "total_pages": len(self.active_pdf)})
+            except Exception as e:
+                return json.dumps({"error": f"Failed to open PDF: {str(e)}"})
         return json.dumps({"error": f"File not found at {path}"})
 
     def _handle_lib_page(self, req):

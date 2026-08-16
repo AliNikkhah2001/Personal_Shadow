@@ -1,7 +1,13 @@
 import os
 import sys
 
-import fitz  # PyMuPDF
+try:
+    import fitz  # PyMuPDF
+    HAS_PYMUPDF = True
+except ImportError:
+    HAS_PYMUPDF = False
+    fitz = None
+
 from PyQt6.QtCore import QRect, QSize, Qt
 from PyQt6.QtGui import QImage, QKeySequence, QPixmap, QShortcut
 from PyQt6.QtWidgets import (

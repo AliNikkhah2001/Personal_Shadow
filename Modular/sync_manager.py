@@ -83,6 +83,21 @@ class SyncManager(QObject):
             except Exception as e:
                 print(f"[SyncManager] Failed to remove lock: {e}")
 
+    def _init_git_lfs(self):
+        """Initialize Git LFS for large file tracking."""
+        try:
+            import subprocess
+            # Check if git-lfs is installed
+            result = subprocess.run(["git", "lfs", "version"], capture_output=True, text=True)
+            if result.returncode != 0:
+                print("[SyncManager] Git LFS not found. Large files will not use LFS.")
+                return
+            # Install git-lfs hooks
+            subprocess.run(["git", "lfs", "install", "--skip-smudge"], cwd=self.repo_path, capture_output=True)
+            print("[SyncManager] Git LFS initialized.")
+        except Exception as e:
+            print(f"[SyncManager] Git LFS init error: {e}")
+
     def setup_repo(self, _retries=0):
         if not self.repo_url:
             return False, "No repository URL configured"
@@ -108,6 +123,9 @@ class SyncManager(QObject):
                 subprocess.run(["git", "config", "http.version", "HTTP/1.1"], cwd=self.repo_path)
                 subprocess.run(["git", "config", "pull.rebase", "false"], cwd=self.repo_path)
 
+                # Initialize Git LFS if not already set up
+                self._init_git_lfs()
+
                 # REWRITE GITIGNORE TO FIX OLD AGGRESSIVE WILDCARDS
                 gitignore_path = os.path.join(self.repo_path, ".gitignore")
                 with open(gitignore_path, "w") as f:
@@ -128,6 +146,9 @@ class SyncManager(QObject):
                     subprocess.run(["git", "config", "user.name", "Mind Palace Sync"], cwd=self.repo_path)
                     subprocess.run(["git", "config", "user.email", "sync@mindpalace.os"], cwd=self.repo_path)
                     subprocess.run(["git", "config", "pull.rebase", "false"], cwd=self.repo_path)
+
+                    # Initialize Git LFS if not already set up
+                    self._init_git_lfs()
 
                     gitignore_path = os.path.join(self.repo_path, ".gitignore")
                     with open(gitignore_path, "w") as f:
