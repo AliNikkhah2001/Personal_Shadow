@@ -178,7 +178,7 @@ class DashboardActionsMixin:
         try:
             today_str = datetime.now().strftime("%Y-%m-%d")
             db.c.execute(
-                "SELECT id, course, duration, actual_duration, timestamp, type, distractions, timelapse_path, distraction_data, note "
+                "SELECT id, course, duration, actual_duration, timestamp, type, distractions, timelapse_path, distraction_data "
                 "FROM pomodoro_sessions WHERE timestamp LIKE ? ORDER BY timestamp ASC",
                 (today_str + "%",),
             )
@@ -193,7 +193,6 @@ class DashboardActionsMixin:
                     "distractions": r[6],
                     "timelapse_path": r[7],
                     "distraction_data": json.loads(r[8] if r[8] else "[]"),
-                    "note": r[9] or "",
                 }
                 for r in db.c.fetchall()
             ]
@@ -290,7 +289,7 @@ class DashboardActionsMixin:
     def _handle_get_history_data(self, req):
         try:
             db.c.execute(
-                "SELECT id, course, duration, actual_duration, timestamp, type, distractions, timelapse_path, distraction_data, note "
+                "SELECT id, course, duration, actual_duration, timestamp, type, distractions, timelapse_path, distraction_data "
                 "FROM pomodoro_sessions ORDER BY timestamp DESC"
             )
             history = [
@@ -304,7 +303,6 @@ class DashboardActionsMixin:
                     "distractions": r[6],
                     "timelapse_path": r[7],
                     "distraction_data": json.loads(r[8] if r[8] else "[]"),
-                    "note": r[9] or "",
                 }
                 for r in db.c.fetchall()
             ]
@@ -316,8 +314,12 @@ class DashboardActionsMixin:
         session_id = req.get("session_id")
         note = req.get("note")
         if session_id:
-            db.c.execute("UPDATE pomodoro_sessions SET note = ? WHERE id = ?", (note, session_id))
-            db.safe_commit()
+            try:
+                db.c.execute("UPDATE pomodoro_sessions SET note = ? WHERE id = ?", (note, session_id))
+                db.safe_commit()
+            except Exception:
+                # note column may not exist in older DBs
+                pass
         return json.dumps({"status": "ok"})
 
     def _handle_save_settings(self, req):

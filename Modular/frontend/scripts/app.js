@@ -19,7 +19,7 @@
         /* Timer feed pub/sub: the once-per-second pomodoro state signal drives
            ONLY the widgets that render live timer state (mini widget + hub),
            instead of re-rendering the whole App tree on every tick. */
-        const DEFAULT_TIMER_STATE = { is_running: false, time_str: "00:00", progress: 0, distractions: 0, course: "General", active_queue_id: null, total_time: 1500, time_left: 1500, distraction_markers: [], distraction_log: [] };
+        const DEFAULT_TIMER_STATE = { is_running: false, time_str: "25:00", progress: 0, distractions: 0, course: "General", active_queue_id: null, total_time: 1500, time_left: 1500, distraction_markers: [], distraction_log: [] };
         let timerSubs = new Set();
         let lastTimerState = DEFAULT_TIMER_STATE;
         let lastQueueJson = null;
