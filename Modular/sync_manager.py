@@ -92,8 +92,11 @@ class SyncManager(QObject):
             if result.returncode != 0:
                 print("[SyncManager] Git LFS not found. Large files will not use LFS.")
                 return
-            # Install git-lfs hooks
-            subprocess.run(["git", "lfs", "install", "--skip-smudge"], cwd=self.repo_path, capture_output=True)
+            # On Windows, skip hook installation to avoid #!/bin/sh WSL errors
+            if os.name == "nt":
+                subprocess.run(["git", "lfs", "install", "--skip-smudge", "--skip-rebase"], cwd=self.repo_path, capture_output=True)
+            else:
+                subprocess.run(["git", "lfs", "install", "--skip-smudge"], cwd=self.repo_path, capture_output=True)
             print("[SyncManager] Git LFS initialized.")
         except Exception as e:
             print(f"[SyncManager] Git LFS init error: {e}")

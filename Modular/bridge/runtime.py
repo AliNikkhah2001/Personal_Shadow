@@ -197,7 +197,10 @@ class RuntimeServicesMixin:
 
     def auto_sync(self):
         if config.get("sync_enabled", False):
-            threading.Thread(target=self.sync_manager.sync, daemon=True).start()
+            try:
+                threading.Thread(target=self.sync_manager.sync, daemon=True).start()
+            except Exception as e:
+                print(f"[SyncManager] Auto-sync error: {e}")
 
     def backup_data(self):
         backup_dir = os.path.join(os.path.expanduser("~"), "MindPalaceBackups")
