@@ -35,6 +35,7 @@ from handlers.note import NoteHandler
 from handlers.nutrition import NutritionHandler
 from handlers.queue import QueueHandler
 from handlers.sync import SyncHandler
+from handlers.filesharing import FileSharingHandler
 from handlers.wallpaper import WallpaperHandler
 from sync_manager import SyncManager
 from ui import OverlayWidget
@@ -197,6 +198,7 @@ class SystemBridge(
             NoteHandler(self),
             QueueHandler(self),
             SyncHandler(self),
+            FileSharingHandler(self),
             AnalyticsHandler(self),
             FoodDetectionHandler(self),
             WallpaperHandler(self),
