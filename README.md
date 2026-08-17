@@ -2,7 +2,7 @@
 
 A cross-platform productivity, deductive analytics, and 3D spatial knowledge management system.
 
-![Version](https://img.shields.io/badge/version-2.0.0-blue)
+![Version](https://img.shields.io/badge/version-2.1.1-blue)
 ![Python](https://img.shields.io/badge/python-3.12+-green)
 ![React](https://img.shields.io/badge/react-18.0+-61dafb)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
@@ -27,6 +27,19 @@ The **Sherlock Holmes Mind Palace** is the ultimate convergence of a "Second Bra
 It is designed to seamlessly track your focus, map your knowledge spatially, analyze your behavioral data deductively, and synchronize perfectly across all your devices using peer-to-peer GitHub node architectures.
 
 ## 📝 Changelog
+
+### v2.1.1 — Crash Fixes, File Sync Overhaul, 86/86 Tests Passing
+- **App startup crash fixed**: Removed WSL git hooks (`post-commit`, `post-checkout`, `post-merge`, `pre-push`) that caused `#!/bin/sh` errors on Windows; `_init_git_lfs` now skips hook installation on Windows; `auto_sync` wrapped in try/except so sync errors no longer crash the app.
+- **Circular goal infinite loop fixed**: Goal with `parent_id` pointing to itself caused `get_flat_goals()` to hang forever; added `visited` set guards in both `get_flat_goals()` and `get_descendant_titles()`.
+- **File sync restructured**: `sync_files()` now mirrors local `MindPalace_Library` directly under `files/` (no device_id prefix); `_clean_old_device_folders()` removes legacy nested folders; `_sync_thread` and `_force_sync_thread` now call `sync_files()` so manual/force syncs also push shared files.
+- **FileSharing tab**: New dedicated File Sharing sidebar view with mapped folders, file hierarchy tree, changelog with device-colored indicators, goal assignment, network nodes, retention policy, and sync status bar (`frontend/scripts/components/filesharing.js`).
+- **FileSharing handler**: `FileSharingHandler` with actions for folder hierarchy, changelog, goal binding, retention policy (`handlers/filesharing.py`).
+- **Comprehensive test suite (86 tests)**: DB schema (17), handler dispatch (27), sync sandboxed (13), full workflow integration (13), frontend JSX compilation (16).
+- **Calorie vision submodule**: Pushed to `https://github.com/AliNikkhah2001/calorie_vision`; webserver on port 5000 with drag-and-drop upload, batch analysis, bounding boxes, macros breakdown.
+
+### v2.1.0 — Advanced FileSharing & K-Cluster Removal
+- K-Cluster peer nodes section and Cluster Topology/Master promote section removed from settings.
+- Config default repo URL changed to `MindPalaceData.git`.
 
 ### v2.0.0 — Steady State: Init, Goals, and Sync locked down
 This release consolidates the modular rewrite and the goal/sync feature trains into a single known-stable version.
@@ -76,7 +89,7 @@ This release consolidates the modular rewrite and the goal/sync feature trains i
 │    ▼                    ▼                    ▼                  │
 │ ┌──────────┐    ┌──────────────┐    ┌──────────────┐           │
 │ │ Handlers │    │ Core Modules │    │  UI Widgets  │           │
-│ │  (11)    │    │              │    │              │           │
+│ │  (12)    │    │              │    │              │           │
 │ │•Nutrition│    │•core_sys     │    │•overlay      │           │
 │ │•Health   │    │•core_logger  │    │•pdf_editor   │           │
 │ │•Habit    │    │•vision_track │    │•timelapse    │           │
@@ -88,6 +101,7 @@ This release consolidates the modular rewrite and the goal/sync feature trains i
 │ │•Analytics│    │              │    │              │           │
 │ │•FoodDet  │    │              │    │              │           │
 │ │•Wallpaper│    │              │    │              │           │
+│ │•FileShare│    │              │    │              │           │
 │ └──────────┘    └──────────────┘    └──────────────┘           │
 │                                                                 │
 │              ┌──────────────┐                                   │
@@ -116,8 +130,9 @@ SystemBridge.request(payload)
     │      ├── QueueHandler.handle()     → manage_queue
     │      ├── SyncHandler.handle()      → sync_now, hard_clone, force_sync
     │      ├── AnalyticsHandler.handle() → get_correlations, insights
-    │      ├── FoodDetectionHandler      → food detection, calorie vision
-    │      └── WallpaperHandler.handle() → save_wallpaper
+│      ├── FoodDetectionHandler      → food detection, calorie vision
+│      ├── WallpaperHandler.handle() → save_wallpaper
+│      └── FileSharingHandler        → folder hierarchy, changelog, goal binding
     │
     └──► _core_action_handlers[action](req)
            │
@@ -132,10 +147,10 @@ SystemBridge.request(payload)
 Modular/
 │
 ├── 📄 main.py                          # Application entry point (190 lines)
-├── 📄 system_bridge.py                 # Central backend dispatcher (1556 lines)
+├── 📄 system_bridge.py                 # Central backend dispatcher (1556 lines, 12 handlers)
 ├── 📄 core_sys.py                      # Config + Database management (156 lines)
 ├── 📄 core_logger.py                   # Logging framework (54 lines)
-├── 📄 sync_manager.py                  # Git-based multi-device sync (421 lines)
+├── 📄 sync_manager.py                  # Git-based multi-device sync (605 lines)
 ├── 📄 vision_tracker.py                # OpenCV attention tracking (209 lines)
 ├── 📄 horology.py                      # Analog clock rendering (102 lines)
 ├── 📄 health_parser.py                 # OCR body scan parser (88 lines)
@@ -161,7 +176,8 @@ Modular/
 │   ├── goal.py                         # Cascading goals
 │   ├── note.py                         # Notes CRUD
 │   ├── queue.py                        # Focus queue management
-│   └── sync.py                         # Device synchronization
+│   ├── sync.py                         # Device synchronization
+│   └── filesharing.py                  # Shared folder hierarchy, changelog, goal binding
 │
 ├── 📁 ui/                              # Reusable UI components
 │   ├── __init__.py                     # Package exports
@@ -185,16 +201,22 @@ Modular/
 │           ├── library.js              # Quiz engine, flashcards
 │           ├── notes.js                # Markdown notes editor
 │           ├── health.js               # Health, nutrition, fitness
-│           └── settings.js             # Application settings
+│           ├── settings.js             # Application settings
+│           └── filesharing.js          # File sharing, folder hierarchy, sync status
 │
-├── 📁 tests/                           # Test suite
+├── 📁 tests/                           # Test suite (86 tests)
 │   ├── __init__.py
 │   ├── test_backend.py                 # Backend config/DB/dispatch tests (22)
 │   ├── test_init_pipeline.py           # End-to-end init + time-based heatmap suite (9)
 │   ├── test_startup.py                 # Startup integration smoke test
 │   ├── test_sync_sandboxed.py          # Sandboxed multi-device sync suite
 │   ├── test_sync_multi_machine.py      # Multi-machine sync scenarios
-│   └── test_runtime_features.py        # Food, blob, timer, wallpaper tests
+│   ├── test_runtime_features.py        # Food, blob, timer, wallpaper tests
+│   ├── test_filesharing_db.py          # Config bindings, retention, DB schema (17)
+│   ├── test_filesharing_handlers.py    # Handler dispatch, hierarchy, changelog (27)
+│   ├── test_filesharing_sync.py        # Sandboxed device, git push/pull (13)
+│   ├── test_filesharing_integration.py # Full workflow, synthetic laptop/phone (13)
+│   └── test_filesharing_frontend.py    # JSX compilation, routing, bridge reg (16)
 │
 ├── 📁 tools/                           # Utilities
 │   ├── data_import.py                  # API data importer
@@ -204,7 +226,13 @@ Modular/
 │
 ├── 📄 requirements.txt                 # Python dependencies
 ├── 📄 pyproject.toml                   # Ruff linter/formatter config
-└── 📄 config.json                      # Application settings
+├── 📄 config.json                      # Application settings
+│
+├── 📁 calorie_vision_submodule/        # Calorie vision estimation (submodule → github.com/AliNikkhah2001/calorie_vision)
+│   ├── app.py                          # Flask webserver (port 5000)
+│   ├── calorie_tracker.py              # Main tracker logic
+│   ├── opencv_calorie_estimator.py     # OpenCV-based calorie estimation
+│   └── size_estimator.py              # MiDaS depth-based size estimation
 ```
 
 ### File Size Guidelines
@@ -236,7 +264,8 @@ Modular/
 ### 🔄 Distributed Sync
 - **Peer-to-Peer Database:** Last-Write-Wins conflict resolution
 - **Git-Based Sync:** Multi-device synchronization via GitHub
-- **Shared Network Drives:** Auto-sync files across devices
+- **Shared Network Folders:** Mirrors local folders into the sync repo, auto-sync across devices
+- **File Sharing:** Folder hierarchy tree, changelog with device-colored indicators, goal assignment, retention policy, network node tracking
 
 ### 🎨 UI/UX
 - **Glassmorphism Design:** Modern translucent panels
@@ -345,22 +374,20 @@ SQLite database (`second_brain.db`) with 22 tables:
 
 ## 🧪 Testing
 
-The suite uses `unittest` (no third-party runner required). Naming convention: `test_*.py` with classes.
+The suite uses `unittest` (no third-party runner required). 86 tests total. Naming convention: `test_*.py` with classes.
 
 ```bash
 # Core backend (config, DB, dispatch, timeline config)
 python -m unittest tests.test_backend
 
 # Init pipeline regression: the full init handshake (goals, habits, heatmap)
-# plus time-based heatmap/studied-hours logic with frozen clocks
 python -m unittest tests.test_init_pipeline
 
-# Startup integration smoke test (runs on import, asserts DB + 22 tables)
+# Startup integration smoke test
 python tests/test_startup.py
 
-# Runtime feature tests (food detection, sync blob encoding, timer tick,
-# wallpaper blob round-trip) — module-level test functions
-python tools/_run_sync_tests.py   # sync suite runner with per-class timeouts
+# File sharing suite (86 tests: DB, handlers, sync, integration, frontend)
+python -m pytest tests/test_filesharing_db.py tests/test_filesharing_handlers.py tests/test_filesharing_sync.py tests/test_filesharing_integration.py tests/test_filesharing_frontend.py -v
 ```
 
 The test suite verifies:
@@ -368,7 +395,8 @@ The test suite verifies:
 - **Database connections, queries, config management, handler dispatch, timeline config** (`test_backend.py`)
 - **End-to-end init pipepline** — `_handle_init` returns goals, habits, habit_logs and a 28×7 heatmap with **no `error` key** (regression, `test_init_pipeline.py`)
 - **Time-based logic** — per-goal studied-hour aggregation rolls child goals into parents and honours `date_filter`; heatmap intensity (0–4) scales with daily hours and maps to the correct 28-day/week column using a frozen clock (`test_init_pipeline.py`)
-- **Multi-device sync** — sandboxed export/merge/conflict/deletion/settings/force-sync/hard-clone/edge cases, plus multi-machine timeline sync (`test_sync_sandboxed.py`, `test_sync_multi_machine.py`; run via `tools/_run_sync_tests.py` — real-git classes may hang on Windows)
+- **Multi-device sync** — sandboxed export/merge/conflict/deletion/settings/force-sync/hard-clone/edge cases, plus multi-machine timeline sync (`test_sync_sandboxed.py`, `test_sync_multi_machine.py`)
+- **File sharing** — config bindings, retention config, DB schema integrity, handler dispatch, folder hierarchy, changelog, goal binding, retention policies, sandboxed device sync, git push/pull, 3-device chain, full workflow integration, synthetic laptop/phone/desktop scenario, JSX Babel compilation, app.js routing, settings cleanup, bridge registration (`test_filesharing_*.py` — 86 tests)
 
 ## 🗺️ Roadmap
 
