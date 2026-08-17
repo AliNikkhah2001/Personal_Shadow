@@ -12,20 +12,6 @@ const parseBackendDate = (str) => {
     return isNaN(d.getTime()) ? str : formatDate(d);
 };
 
-        const formatDate = (date) => date.toISOString().split('T')[0];
-
-const parseBackendDate = (str) => {
-    const match = str.match(/(\d+)\/(\d+)/);
-    if (match) {
-        const month = parseInt(match[1], 10) - 1;
-        const day = parseInt(match[2], 10);
-        const year = new Date().getFullYear();
-        return formatDate(new Date(year, month, day));
-    }
-    const d = new Date(str);
-    return isNaN(d.getTime()) ? str : formatDate(d);
-};
-
 const LifeArchitectureView = ({ goals, backend, refreshGoals, courseColors, studiedHours }) => {
             const [title, setTitle] = useState(""); const [target, setTarget] = useState(""); const [parent, setParent] = useState(""); const [deadline, setDeadline] = useState(new Date(new Date().getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16));
 
@@ -86,20 +72,6 @@ const LifeArchitectureView = ({ goals, backend, refreshGoals, courseColors, stud
                     </div>
                 </div>
             );
-        };
-
-        const formatDate = (date) => date.toISOString().split('T')[0];
-
-const parseBackendDate = (str) => {
-    const match = str.match(/(\d+)\/(\d+)/);
-    if (match) {
-        const month = parseInt(match[1], 10) - 1;
-        const day = parseInt(match[2], 10);
-        const year = new Date().getFullYear();
-        return formatDate(new Date(year, month, day));
-    }
-    const d = new Date(str);
-    return isNaN(d.getTime()) ? str : formatDate(d);
 };
 
 const HabitMatrixView = ({ habits, backend, refreshHabits, habitLogs, setHabitLogs }) => {

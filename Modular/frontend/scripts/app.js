@@ -255,7 +255,7 @@
                                 const newLogs = [...prev, `${success ? '✅' : '❌'} ${msg}`];
                                 return newLogs.slice(-50);
                             });
-                            if(success) {
+                            if (success) {
                                 py.request(JSON.stringify({action: 'init'})).then(res => {
                                     const data = JSON.parse(res);
                                     if (data.courses) setCourses(data.courses);
@@ -283,7 +283,7 @@
                                             health_gender: data.health_profile.gender || prev.health_gender,
                                             health_activity: data.health_profile.activity || prev.health_activity,
                                             health_deficit: data.health_profile.deficit_goal || prev.health_deficit
-                                        });
+                                        }));
                                     }
                                     if (data.health_logs) setHealthLogs(data.health_logs);
                                     if (data.custom_foods) setCustomFoods(data.custom_foods);
