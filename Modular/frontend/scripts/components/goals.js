@@ -58,7 +58,7 @@ const LifeArchitectureView = ({ goals, backend, refreshGoals, courseColors, stud
                 );
             };
             return (
-                <div className="h-full flex flex-col fade-in">
+                <div className="h-full flex flex-col fade-in bg-gray-900/50">
                     <div className="flex justify-between items-center mb-6 shrink-0"><h2 className="text-2xl font-serif font-bold text-white tracking-widest uppercase drop-shadow-md">Life Architecture</h2></div>
                     <div className="flex gap-2 mb-4 shrink-0 glass-panel p-2 flex-wrap">
                         {parent && <span className="text-xs text-blue-400 self-center">Adding sub-goal... <i className="fas fa-times cursor-pointer text-red-400" onClick={()=>setParent("")}></i></span>}
@@ -117,7 +117,7 @@ const HabitMatrixView = ({ habits, backend, refreshHabits, habitLogs, setHabitLo
             };
 
             return (
-                <div className="h-full flex flex-col fade-in">
+                <div className="h-full flex flex-col fade-in bg-gray-900/50">
                     <div className="flex justify-between items-center mb-6 shrink-0"><h2 className="text-2xl font-serif font-bold text-white tracking-widest uppercase drop-shadow-md">Habit Matrix</h2><span className="text-xs text-gray-400 font-mono">7-DAY ROLLING</span></div>
                     <div className="flex gap-2 mb-4 shrink-0 glass-panel p-2">
                         <select className="glass-input px-3 py-1.5 rounded text-xs font-bold" value={newType} onChange={e => setNewType(e.target.value)}><option value="Positive">Positive (+)</option><option value="Negative">Negative (-)</option></select>
@@ -163,7 +163,7 @@ const HabitMatrixView = ({ habits, backend, refreshHabits, habitLogs, setHabitLo
             const tdyStudy = metrics ? metrics.tdy_study : 0; const ydyStudy = metrics ? metrics.ydy_study : 0; const tdyDist = metrics ? metrics.tdy_dist : 0; const ydyDist = metrics ? metrics.ydy_dist : 0;
             const studyDiff = tdyStudy - ydyStudy; const distDiff = tdyDist - ydyDist;
             return (
-                <div className="flex flex-col h-full fade-in">
+                <div className="flex flex-col h-full fade-in bg-gray-900/50">
                     <div className="flex justify-between items-center mb-6 shrink-0"><h2 className="text-2xl font-serif font-bold text-white tracking-widest uppercase drop-shadow-md">Day Summary</h2></div>
                     <div className="flex flex-col gap-4 overflow-y-auto">
                         <div className="glass-panel p-8 text-center border-t-2 border-t-blue-500/50">

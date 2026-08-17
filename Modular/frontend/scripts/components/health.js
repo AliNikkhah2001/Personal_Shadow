@@ -171,7 +171,7 @@
                     }, [activeTab, healthLogs, healthProfile]);
 
                     return (
-                        <div className="h-full flex flex-col fade-in">
+                        <div className="h-full flex flex-col fade-in bg-gray-900/50">
                             <div className="flex justify-between items-center mb-6 shrink-0">
                                 <h2 className="text-2xl font-serif font-bold text-white tracking-widest uppercase drop-shadow-md">Health & Fitness Engine</h2>
                                 <div className="flex gap-4">

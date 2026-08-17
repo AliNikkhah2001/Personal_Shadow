@@ -419,7 +419,7 @@
 
             return (
                 <div className="h-screen w-screen flex overflow-hidden">
-                    <div className={`transition-all duration-300 ease-in-out ${isSidebarCollapsed ? 'w-20' : 'w-64'} glass-panel-darker border-r border-white/10 flex flex-col py-6 z-50 shrink-0 relative shadow-2xl rounded-none border-y-0 border-l-0`}>
+                    <div className={`transition-all duration-300 ease-in-out ${isSidebarCollapsed ? 'w-20' : 'w-64'} glass-panel-darker border-r border-white/10 flex flex-col py-6 z-50 shrink-0 relative shadow-2xl rounded-none border-y-0 border-l-0 bg-gray-900/80`}>
                         
                         <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="absolute -right-3 top-8 bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center shadow-[0_0_10px_rgba(59,130,246,0.5)] hover:bg-blue-500 z-50 transition-transform">
                             <i className={`fas fa-chevron-${isSidebarCollapsed ? 'right' : 'left'} text-[10px]`}></i>
@@ -454,7 +454,7 @@
                         </div>
                     </div>
                     
-                    <div className="flex-grow flex flex-col relative h-full overflow-hidden p-4 sm:p-6 lg:p-8">
+                    <div className="flex-grow flex flex-col relative h-full overflow-hidden p-4 sm:p-6 lg:p-8 bg-gray-900/50">
                         {renderContent()}
                     </div>
                     

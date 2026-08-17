@@ -42,7 +42,7 @@
             };
 
             return (
-                <div className="p-4 h-full flex flex-col w-full">
+                <div className="p-4 h-full flex flex-col w-full bg-gray-900/50">
                     <h3 className="text-gray-300 font-bold uppercase tracking-widest text-sm border-b border-white/10 pb-2 mb-4 flex items-center justify-between">
                         <span>Daily Check-in</span>
                         <span className="text-[10px] font-bold text-blue-400">{new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>

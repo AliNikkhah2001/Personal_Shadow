@@ -10,7 +10,7 @@
             const handleNext = () => { if (selectedOpt === parsedQuiz[qIndex].ans) setScore(s => s + 1); setQIndex(i => i + 1); setSelectedOpt(null); };
 
             return (
-                <div className="flex flex-col h-full fade-in">
+                <div className="flex flex-col h-full fade-in bg-gray-900/50">
                     <div className="flex justify-between items-center mb-6 shrink-0"><h2 className="text-2xl font-serif font-bold text-white tracking-widest uppercase drop-shadow-md">Quiz Engine</h2></div>
                     <div className="flex gap-6 border-b border-white/10 mb-6 shrink-0">
                         <button onClick={() => setActiveTab('library')} className={`pb-2 text-xs font-bold uppercase tracking-widest transition-all ${activeTab === 'library' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-500 hover:text-gray-300'}`}>Library & Import</button>
@@ -114,7 +114,7 @@ const FlashcardsView = ({ flashcards, backend, refreshCards, flatGoals, courseCo
             };
 
             return (
-                <div className="flex flex-col h-full fade-in">
+                <div className="flex flex-col h-full fade-in bg-gray-900/50">
                     <div className="flex justify-between items-center mb-6 shrink-0">
                         <h2 className="text-2xl font-serif font-bold text-white tracking-widest uppercase drop-shadow-md">Flashcards</h2>
                     </div>

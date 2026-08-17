@@ -129,7 +129,7 @@ hr{border:none;border-top:1px solid #ddd;margin:2rem 0;}
     };
 
     return (
-        <div className={`flex flex-col fade-in transition-all duration-300 ${isFullscreen ? 'fixed inset-0 z-[100] bg-[#050505] p-6' : 'h-full'}`}>
+        <div className={`flex flex-col fade-in transition-all duration-300 ${isFullscreen ? 'fixed inset-0 z-[100] bg-gray-900/50 p-6' : 'h-full bg-gray-900/50'}`}>
             {!isFullscreen && (
                 <div className="flex justify-between items-center mb-6 shrink-0">
                     <h2 className="text-2xl font-serif font-bold text-white tracking-widest uppercase drop-shadow-md">Sophisticated Notes</h2>

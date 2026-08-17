@@ -769,7 +769,7 @@ const DashboardHabitWidget = ({ habits, habitLogs }) => {
             const tdee = bmr * (healthProfile?.activity || 1.2);
 
             return (
-                <div className="h-full flex flex-col fade-in">
+                <div className="h-full flex flex-col fade-in bg-gray-900/50">
                     <div className="flex justify-between items-center mb-6 shrink-0">
                         <h2 className="text-2xl font-serif font-bold text-white tracking-widest uppercase text-shadow-blue drop-shadow-md">Dashboard</h2>
                         <div className="flex gap-4 items-center">

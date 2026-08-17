@@ -16,7 +16,7 @@ const SettingsView = React.memo(({ settings, setSettings, backend, networkFolder
         });
     }, [backend, handleChange, setSettings]);
 
-    return <div className="flex flex-col h-full fade-in">
+    return <div className="flex flex-col h-full fade-in bg-gray-900/50">
         <div className="flex justify-between items-center mb-6 shrink-0">
             <h2 className="text-2xl font-serif font-bold text-white tracking-widest uppercase drop-shadow-md">Settings</h2>
             <div className="flex gap-4 items-center"><button onClick={saveSettings} className="glass-button px-6 py-2 rounded text-xs font-bold text-white uppercase bg-blue-600/30 hover:bg-blue-600 border-blue-500/50 shadow-lg">Apply All Settings</button></div>

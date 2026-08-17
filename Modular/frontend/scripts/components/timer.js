@@ -160,7 +160,7 @@ const ProductivityHubView = ({ backend, flatGoals, queue, refreshQueue, settings
             const filteredHistory = historyData.filter(s => s.timestamp.split('T')[0] === selectedDateFilter);
 
             return (
-                <div className="h-full flex flex-col fade-in relative">
+                <div className="h-full flex flex-col fade-in relative bg-gray-900/50">
                     <div className="flex justify-between items-center mb-4 shrink-0"><h2 className="text-2xl font-serif font-bold text-white tracking-widest uppercase drop-shadow-md">Focus Hub</h2></div>
                     <div className="flex gap-6 border-b border-white/10 mb-6 shrink-0">
                         <button onClick={() => setActiveTab('timeline')} className={`pb-2 text-xs font-bold uppercase tracking-widest transition-all ${activeTab === 'timeline' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-500 hover:text-gray-300'}`}>Timeline & Queue</button>
