@@ -426,46 +426,69 @@ class SyncManager(QObject):
             return base64.b64decode(value["__blob_base64__"])
         return value
 
+    def _clean_old_device_folders(self):
+        """Remove old device_id-nested folders from files/ directory.
+
+        Older sync code placed files under files/{device_id}/... .
+        The new structure mirrors the local folder directly under files/ .
+        """
+        files_dir = os.path.join(self.repo_path, self.files_dir)
+        if not os.path.exists(files_dir):
+            return
+        for entry in os.listdir(files_dir):
+            entry_path = os.path.join(files_dir, entry)
+            if entry.startswith("_manifest_") or entry == os.path.basename(os.path.normpath(self.files_dir)):
+                continue
+            if os.path.isdir(entry_path) and len(entry) > 20:
+                try:
+                    shutil.rmtree(entry_path)
+                    print(f"[SyncManager] Removed old device folder: {entry}")
+                except Exception as e:
+                    print(f"[SyncManager] Failed to remove old folder {entry}: {e}")
+
     def sync_files(self):
         local_paths = config.get("sync_local_paths", [])
         if not local_paths:
             return
 
         shared_files_dir = os.path.join(self.repo_path, self.files_dir)
+        os.makedirs(shared_files_dir, exist_ok=True)
         manifest_path = os.path.join(shared_files_dir, f"_manifest_{self.device_id}.json")
 
+        self._clean_old_device_folders()
+
         local_manifest = {}
-        lfs_files = []  # Track files that need LFS
-        LFS_THRESHOLD = 10 * 1024 * 1024  # 10MB threshold for LFS
+        lfs_files = []
+        LFS_THRESHOLD = 10 * 1024 * 1024
 
         for local_path in local_paths:
             if not os.path.exists(local_path):
+                logging.warning("[SyncManager] Mapped path does not exist: %s", local_path)
                 continue
             base_folder = os.path.basename(os.path.normpath(local_path))
             for root, _dirs, files in os.walk(local_path):
-                rel_path = os.path.relpath(root, local_path)
                 for f in files:
                     src = os.path.join(root, f)
                     try:
                         stat = os.stat(src)
-                        # Track LFS candidates (files > 10MB)
-                        file_key = os.path.join(base_folder, rel_path, f) if rel_path != "." else os.path.join(base_folder, f)
-                        if stat.st_size > LFS_THRESHOLD:
-                            lfs_files.append(file_key)
-                        # Skip extremely large files (>100MB) to prevent issues
-                        if stat.st_size > 100 * 1024 * 1024:
-                            continue
+                        rel_path = os.path.relpath(root, local_path)
                         if rel_path == ".":
                             key = os.path.join(base_folder, f)
                         else:
                             key = os.path.join(base_folder, rel_path, f)
+                        if stat.st_size > LFS_THRESHOLD:
+                            lfs_files.append(key)
+                        if stat.st_size > 100 * 1024 * 1024:
+                            continue
                         local_manifest[key] = {
                             "size": stat.st_size,
                             "mtime": stat.st_mtime,
                             "src": src,
                         }
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logging.debug("[SyncManager] Skipping %s: %s", src, e)
+
+        logging.info("[SyncManager] Found %d files to sync from %d mapped paths", len(local_manifest), len(local_paths))
 
         prev_manifest = {}
         if os.path.exists(manifest_path):
@@ -484,15 +507,15 @@ class SyncManager(QObject):
             prev = prev_manifest.get(key)
             if prev and prev.get("size") == info["size"] and prev.get("mtime") == info["mtime"]:
                 continue
-            os.makedirs(os.path.dirname(dst), exist_ok=True)
             try:
+                os.makedirs(os.path.dirname(dst), exist_ok=True)
                 shutil.copy2(info["src"], dst)
                 if prev:
                     changed_files += 1
                 else:
                     new_files += 1
-            except Exception:
-                pass
+            except Exception as e:
+                logging.warning("[SyncManager] Failed to copy %s -> %s: %s", info["src"], dst, e)
 
         for key in prev_manifest:
             if key not in local_manifest:
@@ -516,12 +539,10 @@ class SyncManager(QObject):
                 except Exception:
                     pass
 
-        # Update .gitattributes for Git LFS
         if lfs_files:
             gitattributes_path = os.path.join(self.repo_path, ".gitattributes")
             lfs_patterns = []
             for f in lfs_files:
-                # Escape special characters for gitattributes
                 pattern = f.replace("[", "\\[").replace("]", "\\]").replace("*", "\\*")
                 lfs_patterns.append(f"{pattern} filter=lfs diff=lfs merge=lfs -text")
             try:

@@ -257,9 +257,13 @@ class RuntimeServicesMixin:
             for _gid, data in tree.items():
                 path = [data["title"]]
                 curr = data["parent"]
+                visited = {curr}
                 while curr in tree:
                     path.insert(0, tree[curr]["title"])
                     curr = tree[curr]["parent"]
+                    if curr in visited:
+                        break
+                    visited.add(curr)
                 paths.append(" > ".join(path))
             return sorted(paths)
         except Exception:
@@ -295,13 +299,16 @@ class RuntimeServicesMixin:
                 )
             course_hours = {r[0]: (r[1] or 0) / 60.0 for r in db.c.fetchall()}
 
-            def get_descendant_titles(parent_id):
+            def get_descendant_titles(parent_id, visited=None):
+                if visited is None:
+                    visited = set()
                 titles = []
                 for child_title in children_map.get(parent_id, []):
                     titles.append(child_title)
                     child_id = title_to_gid.get(child_title)
-                    if child_id is not None:
-                        titles.extend(get_descendant_titles(child_id))
+                    if child_id is not None and child_id not in visited:
+                        visited.add(child_id)
+                        titles.extend(get_descendant_titles(child_id, visited))
                 return titles
 
             def hours_for_title(title):

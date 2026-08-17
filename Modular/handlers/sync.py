@@ -111,6 +111,10 @@ class SyncHandler(ActionHandler):
                         print(f"Merge error {filename}: {e}")
                     db.safe_commit()
 
+            self.bridge.sync_progress.emit("Syncing mapped folders...")
+            with contextlib.suppress(Exception):
+                self.bridge.sync_manager.sync_files()
+
             self.bridge.sync_progress.emit("Exporting local state...")
             local_data = self.bridge.sync_manager.export_local_data()
             export_path = os.path.join(self.bridge.sync_manager.repo_path, self.bridge.sync_manager.sync_data_file)
@@ -237,6 +241,10 @@ class SyncHandler(ActionHandler):
 
             db.c.execute("DELETE FROM deleted_uuids")
             db.safe_commit()
+
+            self.bridge.sync_progress.emit("Syncing mapped folders...")
+            with contextlib.suppress(Exception):
+                self.bridge.sync_manager.sync_files()
 
             self.bridge.sync_progress.emit("Exporting Master local data...")
             self.bridge.sync_manager.ensure_uuids_and_timestamps()
