@@ -39,7 +39,7 @@ class SyncManager(QObject):
         self.token = os.getenv("GITHUB_TOKEN", "")
         if not self.token:
             self.token = config.get("sync_github_token", "")
-        self.repo_url = config.get("sync_repo_url", "")
+        self.repo_url = config.get("sync_repo_url", "https://github.com/AliNikkhah2001/MindPalaceData.git")
 
     def get_device_id(self):
         try:
