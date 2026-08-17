@@ -59,7 +59,9 @@ class SandboxedDevice:
         os.makedirs(folder, exist_ok=True)
         if files:
             for fname, content in files.items():
-                with open(os.path.join(folder, fname), "w") as f:
+                fpath = os.path.join(folder, fname)
+                os.makedirs(os.path.dirname(fpath), exist_ok=True)
+                with open(fpath, "w") as f:
                     f.write(content)
         return folder
 

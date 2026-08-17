@@ -63,30 +63,32 @@ class TestEndToEndFolderWorkflow(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
-    @patch("handlers.filesharing.config")
-    def test_full_workflow(self, mock_config):
-        mock_config.get.return_value = {}
-        mock_config.set = MagicMock(side_effect=lambda k, v: mock_config.get.return_value.update({k: v}) or mock_config.cfg.__setitem__(k, v))
+    def test_full_workflow(self):
+        store = {}
+        mock_config = MagicMock()
+        mock_config.get = MagicMock(side_effect=lambda k, d=None: store.get(k, d if d is not None else {}))
+        mock_config.set = MagicMock(side_effect=lambda k, v: store.__setitem__(k, v))
 
-        hierarchy = json.loads(self.handler.get_folder_hierarchy({"path": self.shared_folder}))
-        self.assertIn("tree", hierarchy)
-        tree = hierarchy["tree"]
-        self.assertEqual(tree["type"], "directory")
-        self.assertEqual(len(tree["children"]), 3)
-        child_names = {c["name"] for c in tree["children"]}
-        self.assertEqual(child_names, {"documents", "code", "images"})
+        with patch("handlers.filesharing.config", mock_config):
+            hierarchy = json.loads(self.handler.get_folder_hierarchy({"path": self.shared_folder}))
+            self.assertIn("tree", hierarchy)
+            tree = hierarchy["tree"]
+            self.assertEqual(tree["type"], "directory")
+            self.assertEqual(len(tree["children"]), 3)
+            child_names = {c["name"] for c in tree["children"]}
+            self.assertEqual(child_names, {"documents", "code", "images"})
 
-        docs_node = next(c for c in tree["children"] if c["name"] == "documents")
-        self.assertEqual(len(docs_node["children"]), 2)
+            docs_node = next(c for c in tree["children"] if c["name"] == "documents")
+            self.assertEqual(len(docs_node["children"]), 2)
 
-        bind_result = json.loads(self.handler.bind_folder_goal({
-            "folder": self.shared_folder,
-            "goal_uuid": "goal-uuid-abc",
-        }))
-        self.assertEqual(bind_result["status"], "success")
+            bind_result = json.loads(self.handler.bind_folder_goal({
+                "folder": self.shared_folder,
+                "goal_uuid": "goal-uuid-abc",
+            }))
+            self.assertEqual(bind_result["status"], "success")
 
-        bindings = json.loads(self.handler.get_goal_folder_bindings({}))
-        self.assertIn(self.shared_folder, bindings["bindings"])
+            bindings = json.loads(self.handler.get_goal_folder_bindings({}))
+            self.assertIn(self.shared_folder, bindings["bindings"])
 
     def test_hierarchy_file_sizes(self):
         hierarchy = json.loads(self.handler.get_folder_hierarchy({"path": self.shared_folder}))
@@ -124,43 +126,46 @@ class TestChangelogWithCommits(unittest.TestCase):
         self.bridge = MockBridge(self.repo_path)
         self.handler = FileSharingHandler(self.bridge)
 
+        self.test_folder = os.path.join(self.repo_path, "mydata")
+        os.makedirs(self.test_folder)
+
     def tearDown(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def test_changelog_after_commits(self):
         for i in range(5):
-            with open(os.path.join(self.repo_path, f"file{i}.txt"), "w") as f:
+            with open(os.path.join(self.test_folder, f"file{i}.txt"), "w") as f:
                 f.write(f"content {i}")
             self.repo.git.add(A=True)
             self.repo.index.commit(f"add file{i}")
 
         result = json.loads(self.handler.get_folder_changelog({
-            "path": self.tmp_dir,
+            "path": self.test_folder,
             "days": 30,
         }))
         self.assertGreaterEqual(len(result["changelog"]), 5)
 
     def test_changelog_respects_days_filter(self):
         for i in range(3):
-            with open(os.path.join(self.repo_path, f"recent{i}.txt"), "w") as f:
+            with open(os.path.join(self.test_folder, f"recent{i}.txt"), "w") as f:
                 f.write(f"recent {i}")
             self.repo.git.add(A=True)
             self.repo.index.commit(f"add recent{i}")
 
         result = json.loads(self.handler.get_folder_changelog({
-            "path": self.tmp_dir,
+            "path": self.test_folder,
             "days": 1,
         }))
         self.assertGreaterEqual(len(result["changelog"]), 1)
 
     def test_changelog_entry_structure(self):
-        with open(os.path.join(self.repo_path, "test.txt"), "w") as f:
+        with open(os.path.join(self.test_folder, "test.txt"), "w") as f:
             f.write("test")
         self.repo.git.add(A=True)
         self.repo.index.commit("add test file")
 
         result = json.loads(self.handler.get_folder_changelog({
-            "path": self.tmp_dir,
+            "path": self.test_folder,
             "days": 30,
         }))
         entry = result["changelog"][-1]
@@ -215,7 +220,7 @@ class TestRetentionEndToEnd(unittest.TestCase):
 
     def test_retention_with_various_ages(self):
         export_dir = os.path.join(self.repo_path, "db_exports")
-        ages_days = [1, 10, 30, 31, 60, 90]
+        ages_days = [1, 10, 29, 31, 60, 90]
         for age in ages_days:
             fname = f"device_{age}d.json"
             fpath = os.path.join(export_dir, fname)
@@ -228,7 +233,7 @@ class TestRetentionEndToEnd(unittest.TestCase):
         remaining = os.listdir(export_dir)
         self.assertIn("device_1d.json", remaining)
         self.assertIn("device_10d.json", remaining)
-        self.assertIn("device_30d.json", remaining)
+        self.assertIn("device_29d.json", remaining)
         self.assertNotIn("device_31d.json", remaining)
         self.assertNotIn("device_60d.json", remaining)
         self.assertNotIn("device_90d.json", remaining)

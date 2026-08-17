@@ -10,6 +10,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -215,30 +216,34 @@ class TestChangelog(unittest.TestCase):
     def test_changelog_with_git_commits(self):
         import git as gitmodule
         repo = gitmodule.Repo.init(self.repo_path)
-        with open(os.path.join(self.repo_path, "test.txt"), "w") as f:
+        test_folder = os.path.join(self.repo_path, "mydata")
+        os.makedirs(test_folder)
+        with open(os.path.join(test_folder, "test.txt"), "w") as f:
             f.write("v1")
         repo.git.add(A=True)
         repo.index.commit("add test file")
 
-        with open(os.path.join(self.repo_path, "test.txt"), "w") as f:
+        with open(os.path.join(test_folder, "test.txt"), "w") as f:
             f.write("v2")
         repo.git.add(A=True)
         repo.index.commit("modify test file")
 
-        result = json.loads(self.handler.get_folder_changelog({"path": self.tmp_dir, "days": 30}))
+        result = json.loads(self.handler.get_folder_changelog({"path": test_folder, "days": 30}))
         self.assertGreaterEqual(len(result["changelog"]), 1)
 
     def test_changelog_respects_max_changes(self):
         import git as gitmodule
         repo = gitmodule.Repo.init(self.repo_path)
+        test_folder = os.path.join(self.repo_path, "maxdata")
+        os.makedirs(test_folder)
         for i in range(10):
-            with open(os.path.join(self.repo_path, f"file{i}.txt"), "w") as f:
+            with open(os.path.join(test_folder, f"file{i}.txt"), "w") as f:
                 f.write(f"content {i}")
             repo.git.add(A=True)
             repo.index.commit(f"add file{i}")
 
         result = json.loads(self.handler.get_folder_changelog({
-            "path": self.tmp_dir, "days": 30, "max_changes": 3,
+            "path": test_folder, "days": 30, "max_changes": 3,
         }))
         self.assertLessEqual(len(result["changelog"]), 3)
 

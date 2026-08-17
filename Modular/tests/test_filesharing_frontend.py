@@ -21,21 +21,24 @@ class TestJSXCompilation(unittest.TestCase):
         if not os.path.exists(FILESHARING_JS):
             self.skipTest("filesharing.js not found")
 
-        with open(FILESHARING_JS, "r", encoding="utf-8") as f:
-            source = f.read()
+        babel_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "shadow_os_cache", "js", "babel.js",
+        )
+        if not os.path.exists(babel_path):
+            self.skipTest("babel.js not found")
 
-        babel_script = f"""
-        const babel = require('/c/Users/10225/Downloads/SHADOW OS copy 2/SHADOW OS copy 2/Modular/shadow_os_cache/js/babel.js');
-        try {{
-            const result = babel.transform(`{source.replace('`', '\\`')}`, {{
-                presets: ['react'],
-                plugins: [['@babel/plugin-transform-modules-commonjs', {{ strict: false }}]]
-            }});
+        babel_script = """
+        var fs = require('fs');
+        var babel = require('""" + babel_path.replace(os.sep, '/') + """');
+        var code = fs.readFileSync('""" + FILESHARING_JS.replace(os.sep, '/').replace("'", "\\'") + """', 'utf8');
+        try {
+            var result = babel.transform(code, { presets: ['react'] });
             console.log('COMPILE_OK');
-        }} catch(e) {{
+        } catch(e) {
             console.error('COMPILE_ERROR:', e.message);
             process.exit(1);
-        }}
+        }
         """
         result = subprocess.run(
             ["node", "-e", babel_script],
