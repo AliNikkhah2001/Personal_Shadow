@@ -72,7 +72,10 @@ class DownloaderThread(QThread):
             ("js/tailwind.js", "https://cdn.tailwindcss.com"),
             ("js/marked.js", "https://cdn.jsdelivr.net/npm/marked/marked.min.js"),
             ("js/chart.umd.js", "https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"),
-            ("js/three.module.js", "https://unpkg.com/three@0.160.0/build/three.module.js"),
+            ("js/three.module.js", "https://cdn.jsdelivr.net/npm/three@0.150.0/build/three.module.js"),
+            ("js/three.min.js", "https://cdn.jsdelivr.net/npm/three@0.150.0/build/three.min.js"),
+            ("js/three-orbit-controls.js", "https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/jsm/controls/OrbitControls.js"),
+            ("js/three-roundedbox.js", "https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/jsm/geometries/RoundedBoxGeometry.js"),
             ("css/all.min.css", "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"),
             (
                 "webfonts/fa-solid-900.woff2",
