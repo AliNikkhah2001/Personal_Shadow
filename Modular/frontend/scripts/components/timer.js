@@ -223,9 +223,11 @@ const ProductivityHubView = ({ backend, flatGoals, queue, refreshQueue, settings
                                                             
                                                             {s.distraction_data && s.distraction_data.map((d, di) => {
                                                                 const dType = d.length > 2 ? d[2] : "Manual";
-                                                                const distColor = dType === "App" ? "bg-orange-500" : (dType === "Camera" ? "bg-red-500" : "bg-yellow-400");
+                                                                const distColor = dType === "App" ? "rgba(249,115,22,0.85)" : (dType === "Camera" ? "rgba(239,68,68,0.85)" : "rgba(250,204,21,0.85)");
                                                                 return (
-                                                                    <div key={di} className={`absolute top-0 h-full ${distColor} z-10 opacity-80`} style={{ left: `${(d[0] / actualDur) * 100}%`, width: `${Math.max((d[1] / actualDur) * 100, 2)}%` }}></div>
+                                                                    <div key={di} className="absolute top-0 h-full z-10" 
+                                                                         style={{ left: `${(d[0] / actualDur) * 100}%`, width: `${Math.max((d[1] / actualDur) * 100, 2)}%`, backgroundColor: distColor, backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(0,0,0,0.15) 2px, rgba(0,0,0,0.15) 4px)', borderLeft: '2px solid rgba(255,255,255,0.4)', borderRight: '2px solid rgba(255,255,255,0.4)' }}>
+                                                                    </div>
                                                                 );
                                                             })}
                                                         </div>
@@ -239,14 +241,16 @@ const ProductivityHubView = ({ backend, flatGoals, queue, refreshQueue, settings
                                                      style={{ left: `${activeStartMins * pxPerMin}px`, width: `${activeWidthMins * pxPerMin}px`, backgroundColor: getTaskColor(timerState.course, false) }}>
                                                     <span className="text-[10px] font-bold text-white drop-shadow-md z-10">{timerState.course}</span>
                                                     
-                                                    {/* Active Distraction Markers */}
-                                                    {timerState.distraction_log && timerState.distraction_log.map((d, di) => {
-                                                       const dType = d.length > 2 ? d[2] : "Manual";
-                                                       const distColor = dType === "App" ? "bg-orange-500" : (dType === "Camera" ? "bg-red-500" : "bg-yellow-400");
-                                                       return (
-                                                           <div key={di} className={`absolute top-0 h-full ${distColor} z-10 opacity-80`} style={{ left: `${(d[0] / activeWidthMins) * 100}%`, width: `${Math.max((d[1] / activeWidthMins) * 100, 2)}%` }}></div>
-                                                       );
-                                                    })}
+                                                     {/* Active Distraction Markers */}
+                                                     {timerState.distraction_log && timerState.distraction_log.map((d, di) => {
+                                                        const dType = d.length > 2 ? d[2] : "Manual";
+                                                        const distColor = dType === "App" ? "rgba(249,115,22,0.85)" : (dType === "Camera" ? "rgba(239,68,68,0.85)" : "rgba(250,204,21,0.85)");
+                                                        return (
+                                                            <div key={di} className="absolute top-0 h-full z-10" 
+                                                                 style={{ left: `${(d[0] / activeWidthMins) * 100}%`, width: `${Math.max((d[1] / activeWidthMins) * 100, 2)}%`, backgroundColor: distColor, backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(0,0,0,0.15) 2px, rgba(0,0,0,0.15) 4px)', borderLeft: '2px solid rgba(255,255,255,0.4)', borderRight: '2px solid rgba(255,255,255,0.4)' }}>
+                                                            </div>
+                                                        );
+                                                     })}
                                                 </div>
                                             )}
                                             
@@ -264,7 +268,14 @@ const ProductivityHubView = ({ backend, flatGoals, queue, refreshQueue, settings
                                         </div>
                                     </div>
                                     
-                                    <div className="flex-grow mt-6 bg-black/30 rounded-xl border border-white/10 p-4 overflow-y-auto">
+                                    <div className="flex items-center gap-4 mt-1 mb-2 px-1">
+                                        <span className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Distractions:</span>
+                                        <span className="flex items-center gap-1"><span className="w-3 h-2 rounded-sm" style={{backgroundColor:'rgba(249,115,22,0.85)', backgroundImage:'repeating-linear-gradient(45deg,transparent,transparent 1px,rgba(0,0,0,0.15) 1px,rgba(0,0,0,0.15) 2px)'}}></span><span className="text-[9px] text-gray-500">App</span></span>
+                                        <span className="flex items-center gap-1"><span className="w-3 h-2 rounded-sm" style={{backgroundColor:'rgba(239,68,68,0.85)', backgroundImage:'repeating-linear-gradient(45deg,transparent,transparent 1px,rgba(0,0,0,0.15) 1px,rgba(0,0,0,0.15) 2px)'}}></span><span className="text-[9px] text-gray-500">Camera</span></span>
+                                        <span className="flex items-center gap-1"><span className="w-3 h-2 rounded-sm" style={{backgroundColor:'rgba(250,204,21,0.85)', backgroundImage:'repeating-linear-gradient(45deg,transparent,transparent 1px,rgba(0,0,0,0.15) 1px,rgba(0,0,0,0.15) 2px)'}}></span><span className="text-[9px] text-gray-500">Manual</span></span>
+                                    </div>
+
+                                    <div className="flex-grow mt-4 bg-black/30 rounded-xl border border-white/10 p-4 overflow-y-auto">
                                         <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest border-b border-white/10 pb-2 mb-3">Today's Completed Blocks</h3>
                                         <div className="flex flex-col gap-2">
                                             {(!todaySessions || todaySessions.length === 0) && <div className="text-gray-500 text-xs italic">No blocks completed today.</div>}

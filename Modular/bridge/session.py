@@ -240,17 +240,18 @@ class SessionMixin:
         return json.dumps({"status": "started"})
 
     def _handle_stop_timer(self, req):
+        was_running = self.is_running
         self.is_running = False
         self.timer.stop()
         self.ovl.hide()
         self.vision.stop()
-        self.time_left = 0
 
-        if self.active_queue_id:
+        if was_running and self.active_queue_id:
             db.c.execute("UPDATE focus_queue SET status='pending' WHERE id=?", (self.active_queue_id,))
             self.active_queue_id = None
             db.safe_commit()
 
+        self.time_left = self.total_time
         self.push_state()
         return json.dumps({"status": "stopped"})
 
