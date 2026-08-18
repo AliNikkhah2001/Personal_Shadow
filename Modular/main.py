@@ -73,6 +73,9 @@ class DownloaderThread(QThread):
             ("js/marked.js", "https://cdn.jsdelivr.net/npm/marked/marked.min.js"),
             ("js/chart.umd.js", "https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"),
             ("js/three.module.js", "https://unpkg.com/three@0.160.0/build/three.module.js"),
+            ("js/three.min.js", "https://unpkg.com/three@0.150.0/build/three.min.js"),
+            ("js/three-orbit-controls.js", "https://unpkg.com/three@0.150.0/examples/js/controls/OrbitControls.js"),
+            ("js/three-roundedbox.js", "https://unpkg.com/three@0.150.0/examples/js/geometries/RoundedBoxGeometry.js"),
             ("css/all.min.css", "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"),
             (
                 "webfonts/fa-solid-900.woff2",
@@ -187,7 +190,10 @@ class MindPalaceWebOS(QMainWindow):
         with open("frontend/index.html", encoding="utf-8") as f:
             html_content = f.read()
 
-        base_url = QUrl.fromLocalFile(os.path.abspath(".") + os.sep)
+        base_dir = os.path.abspath("frontend")
+        base_url = QUrl.fromLocalFile(base_dir + os.sep)
+        shelf_url = QUrl.fromLocalFile(os.path.join(base_dir, "shelf", "shelf.html")).toString()
+        html_content = html_content.replace("__SHELF_URL__", shelf_url)
         self.browser.setHtml(html_content, base_url)
         self.setCentralWidget(self.browser)
 
