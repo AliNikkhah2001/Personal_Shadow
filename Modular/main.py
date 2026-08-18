@@ -76,6 +76,9 @@ class DownloaderThread(QThread):
             ("js/three.min.js", "https://cdn.jsdelivr.net/npm/three@0.150.0/build/three.min.js"),
             ("js/three-orbit-controls.js", "https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/jsm/controls/OrbitControls.js"),
             ("js/three-roundedbox.js", "https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/jsm/geometries/RoundedBoxGeometry.js"),
+            ("js/markdown-it.min.js", "https://cdn.jsdelivr.net/npm/markdown-it@14.1.0/dist/markdown-it.min.js"),
+            ("js/markdown-it-footnote.min.js", "https://cdn.jsdelivr.net/npm/markdown-it-footnote@4.0.0/dist/markdown-it-footnote.min.js"),
+            ("js/markdown-it-table.min.js", "https://cdn.jsdelivr.net/npm/markdown-it-table@1.0.0/dist/markdown-it-table.min.js"),
             ("css/all.min.css", "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"),
             (
                 "webfonts/fa-solid-900.woff2",
