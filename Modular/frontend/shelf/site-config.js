@@ -1,4 +1,4 @@
-export const siteConfig = {
+window.ShelfConfig = {
   title: "The Complete Shelf — An Interactive 3D Library",
   applicationName: "The Complete Shelf",
   description:

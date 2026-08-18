@@ -1,4 +1,4 @@
-export const catalog = ([
+window.ShelfCatalog = ([
   {
     id: "poor-charlies-almanack",
     title: "Poor Charlie\u2019s Almanack",

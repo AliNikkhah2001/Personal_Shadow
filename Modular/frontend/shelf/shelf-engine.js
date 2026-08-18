@@ -1,32 +1,7 @@
-import * as THREE from "three";
-import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
-import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
-import {
-  bookFootprintsOverlap,
-  browseMotionPose,
-  browsePhaseDuration,
-  createMotionLayout,
-  focusedBookPose,
-  presentedBookPose,
-  shelvedBookPose,
-} from "./book-motion.js";
-import {
-  createBackCover,
-  createFrontCover,
-  createSpineCover,
-  createTitleDecal,
-} from "./cover-art.js";
-import {
-  STRIPE_ASSET_ROOT,
-  stripeAssetUrl,
-} from "./stripe-assets.js";
-import {
-  addStripeFoilBlend,
-  stripeFoilSettings,
-} from "./stripe-foil.js";
-import { siteConfig } from "./site-config.js";
+// Uses globals: THREE, THREE.OrbitControls, THREE.RoundedBoxGeometry
+// Also uses: ShelfMotion, ShelfCover, ShelfStripe, ShelfFoil, ShelfConfig
 
+const siteConfig = window.ShelfConfig;
 const shelfTop = 0.34;
 const browseCamera = new THREE.Vector3(0, 1.42, 6.65);
 const browseTarget = new THREE.Vector3(0, 1.28, 0.15);
@@ -110,7 +85,7 @@ function createLivingMaterial(color) {
   });
 }
 
-export class ShelfEngine {
+class ShelfEngine {
   canvas;
   booksData;
   callbacks;
@@ -134,7 +109,7 @@ export class ShelfEngine {
   browseMotionPhase = "idle";
   browseMotionProgress = 0;
   motionBookIndex = null;
-  motionLayout = createMotionLayout([]);
+  motionLayout = ShelfMotion.createMotionLayout([]);
   collisionRejects = 0;
   lastCollisionPair = null;
   scrollIndex = 0;
@@ -187,7 +162,7 @@ export class ShelfEngine {
     this.camera.position.copy(browseCamera);
     this.camera.lookAt(browseTarget);
 
-    this.controls = new OrbitControls(this.camera, this.canvas);
+    this.controls = new THREE.OrbitControls(this.camera, this.canvas);
     this.controls.enabled = false;
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.075;
@@ -295,7 +270,7 @@ export class ShelfEngine {
       cursor += book.thickness * 0.5 + gap;
     });
 
-    this.motionLayout = createMotionLayout(
+    this.motionLayout = ShelfMotion.createMotionLayout(
       this.runtimeBooks.map((book) => ({
         width: book.width,
         thickness: book.data.thickness,
@@ -305,14 +280,14 @@ export class ShelfEngine {
       this.commitBookPose(
         book,
         index === 0
-          ? presentedBookPose(this.motionLayout)
-          : shelvedBookPose(this.motionLayout),
+          ? ShelfMotion.presentedBookPose(this.motionLayout)
+          : ShelfMotion.shelvedBookPose(this.motionLayout),
         false,
       );
     });
 
     const shelfWidth = cursor + 8;
-    const shelfGeometry = new RoundedBoxGeometry(shelfWidth, 0.22, 1.72, 4, 0.045);
+    const shelfGeometry = new THREE.RoundedBoxGeometry(shelfWidth, 0.22, 1.72, 4, 0.045);
     const shelfMaterial = new THREE.MeshStandardMaterial({
       color: shelfColor,
       roughness: 0.62,
@@ -326,7 +301,7 @@ export class ShelfEngine {
     this.shelfFurniture.add(shelf);
 
     const shelfEdge = new THREE.Mesh(
-      new RoundedBoxGeometry(shelfWidth, 0.12, 0.16, 3, 0.025),
+      new THREE.RoundedBoxGeometry(shelfWidth, 0.12, 0.16, 3, 0.025),
       new THREE.MeshPhysicalMaterial({
         color: "#4b3429",
         roughness: 0.46,
@@ -349,7 +324,7 @@ export class ShelfEngine {
     const content = new THREE.Group();
     content.name = `bookPresentation:${book.id}`;
     slot.add(content);
-    const pose = shelvedBookPose(this.motionLayout);
+    const pose = ShelfMotion.shelvedBookPose(this.motionLayout);
     content.position.set(pose.x, 0, pose.z);
     content.rotation.y = pose.yaw;
     content.scale.setScalar(pose.scale);
@@ -383,7 +358,7 @@ export class ShelfEngine {
     });
 
     const pageBlock = new THREE.Mesh(
-      new RoundedBoxGeometry(
+      new THREE.RoundedBoxGeometry(
         width - 0.075,
         book.height - 0.105,
         Math.max(0.08, depth - 0.052),
@@ -397,7 +372,7 @@ export class ShelfEngine {
     pageBlock.receiveShadow = true;
     physical.add(pageBlock);
 
-    const boardGeometry = new RoundedBoxGeometry(
+    const boardGeometry = new THREE.RoundedBoxGeometry(
       width,
       book.height,
       0.034,
@@ -419,7 +394,7 @@ export class ShelfEngine {
     physical.add(backBoard);
 
     const spine = new THREE.Mesh(
-      new RoundedBoxGeometry(0.055, book.height - 0.01, depth + 0.012, 3, 0.018),
+      new THREE.RoundedBoxGeometry(0.055, book.height - 0.01, depth + 0.012, 3, 0.018),
       boardMaterial,
     );
     spine.name = "spine";
@@ -441,10 +416,10 @@ export class ShelfEngine {
     headbandBottom.position.y = -book.height * 0.5 + 0.045;
     physical.add(headbandBottom);
 
-    const frontTexture = toTexture(createFrontCover(book), this.renderer);
-    const titleTexture = toTexture(createTitleDecal(book), this.renderer);
-    const spineTexture = toTexture(createSpineCover(book), this.renderer, 4);
-    const backTexture = toTexture(createBackCover(book), this.renderer);
+    const frontTexture = toTexture(ShelfCover.createFrontCover(book), this.renderer);
+    const titleTexture = toTexture(ShelfCover.createTitleDecal(book), this.renderer);
+    const spineTexture = toTexture(ShelfCover.createSpineCover(book), this.renderer, 4);
+    const backTexture = toTexture(ShelfCover.createBackCover(book), this.renderer);
     const textures = [frontTexture, titleTexture, spineTexture, backTexture];
 
     const frontSurface = new THREE.Mesh(
@@ -729,7 +704,7 @@ export class ShelfEngine {
       this.runtimeBooks.find(
         (other) =>
           other !== book &&
-          bookFootprintsOverlap(
+          ShelfMotion.bookFootprintsOverlap(
             proposed,
             this.footprintFor(other),
             this.motionLayout.collisionMargin,
@@ -803,15 +778,15 @@ export class ShelfEngine {
     const motionIndex = this.motionBookIndex;
     if (motionIndex === null) return;
     const duration = this.reducedMotion
-      ? Math.max(0.055, browsePhaseDuration[phase] * 0.45)
-      : browsePhaseDuration[phase];
+      ? Math.max(0.055, ShelfMotion.browsePhaseDuration[phase] * 0.45)
+      : ShelfMotion.browsePhaseDuration[phase];
     const nextProgress = clamp(
       this.browseMotionProgress + delta / duration,
       0,
       1,
     );
     const movingBook = this.runtimeBooks[motionIndex];
-    const proposedPose = browseMotionPose(
+    const proposedPose = ShelfMotion.browseMotionPose(
       phase,
       nextProgress,
       this.motionLayout,
@@ -944,7 +919,7 @@ export class ShelfEngine {
         if (this.selectedIndex !== null) {
           this.commitBookPose(
             this.runtimeBooks[this.selectedIndex],
-            presentedBookPose(this.motionLayout),
+            ShelfMotion.presentedBookPose(this.motionLayout),
           );
           this.presentedIndex = this.selectedIndex;
         }
@@ -988,7 +963,7 @@ export class ShelfEngine {
       const selected = this.runtimeBooks[this.selectedIndex];
       this.commitBookPose(
         selected,
-        focusedBookPose(
+        ShelfMotion.focusedBookPose(
           motionFocus,
           this.motionLayout,
           focusX,
@@ -1136,8 +1111,8 @@ export class ShelfEngine {
     try {
       this.callbacks.onStatus("Finishing the shelf");
       const [booksResponse, objResponse] = await Promise.all([
-        fetch(`${STRIPE_ASSET_ROOT}/books.json`),
-        fetch(`${STRIPE_ASSET_ROOT}/mesh/stripe-press-book.obj`),
+        fetch(`${ShelfStripe.STRIPE_ASSET_ROOT}/books.json`),
+        fetch(`${ShelfStripe.STRIPE_ASSET_ROOT}/mesh/stripe-press-book.obj`),
       ]);
       if (!booksResponse.ok || !objResponse.ok) {
         throw new Error("Stripe Press asset archive unavailable");
@@ -1189,7 +1164,7 @@ export class ShelfEngine {
     if (cached) return cached;
 
     const promise = new THREE.TextureLoader()
-      .loadAsync(stripeAssetUrl(key))
+      .loadAsync(ShelfStripe.stripeAssetUrl(key))
       .then((texture) => {
         texture.name = key;
         texture.colorSpace = color ? THREE.SRGBColorSpace : THREE.NoColorSpace;
@@ -1253,7 +1228,7 @@ export class ShelfEngine {
         throw new Error(`Missing cover texture for ${bookAsset.slug}`);
       }
 
-      const foilSettings = stripeFoilSettings(bookAsset.material);
+      const foilSettings = ShelfFoil.stripeFoilSettings(bookAsset.material);
       const material = new THREE.MeshPhysicalMaterial({
         name: `stripePressMaterial:${bookAsset.slug}`,
         map: diffuse,
@@ -1274,7 +1249,7 @@ export class ShelfEngine {
           shader.uniforms.stripeFoilDetail = {
             value: foilSettings.detail,
           };
-          shader.fragmentShader = addStripeFoilBlend(
+          shader.fragmentShader = ShelfFoil.addStripeFoilBlend(
             shader.fragmentShader,
           );
         };
@@ -1383,7 +1358,7 @@ export class ShelfEngine {
       ) {
         const right = this.runtimeBooks[rightIndex];
         if (
-          bookFootprintsOverlap(
+          ShelfMotion.bookFootprintsOverlap(
             this.footprintFor(left),
             this.footprintFor(right),
             this.motionLayout.collisionMargin,
@@ -1457,3 +1432,5 @@ export class ShelfEngine {
     delete window.__PRESS_LIBRARY__;
   }
 }
+
+window.ShelfEngine = ShelfEngine;

@@ -1,4 +1,4 @@
-import { siteConfig } from "./site-config.js";
+window.ShelfCover = {};
 
 const serif = '"Newsreader Variable", "Iowan Old Style", Georgia, serif';
 const sans = '"Inter Variable", Inter, Arial, sans-serif';
@@ -381,7 +381,7 @@ function drawCoverTypography(ctx, book, width, height, decalOnly = false) {
   ctx.textBaseline = "top";
   ctx.letterSpacing = "7px";
   ctx.font = `600 25px ${sans}`;
-  ctx.fillText(siteConfig.coverImprint, 82, 74);
+  ctx.fillText(window.ShelfConfig.coverImprint, 82, 74);
 
   ctx.letterSpacing = "0px";
   const titleSize = book.title.length > 38 ? 74 : book.title.length > 24 ? 86 : 112;
@@ -397,12 +397,12 @@ function drawCoverTypography(ctx, book, width, height, decalOnly = false) {
     ctx.globalAlpha = 0.75;
     ctx.font = `500 20px ${sans}`;
     ctx.letterSpacing = "3px";
-    ctx.fillText(siteConfig.coverTagline, 82, height - 90);
+    ctx.fillText(window.ShelfConfig.coverTagline, 82, height - 90);
   }
   ctx.restore();
 }
 
-export function createFrontCover(book) {
+function createFrontCover(book) {
   const logicalWidth = 1024;
   const logicalHeight = 1536;
   const canvas = document.createElement("canvas");
@@ -428,7 +428,7 @@ export function createFrontCover(book) {
   return canvas;
 }
 
-export function createTitleDecal(book) {
+function createTitleDecal(book) {
   const logicalWidth = 1024;
   const logicalHeight = 1536;
   const canvas = document.createElement("canvas");
@@ -441,7 +441,7 @@ export function createTitleDecal(book) {
   return canvas;
 }
 
-export function createSpineCover(book) {
+function createSpineCover(book) {
   const logicalWidth = 256;
   const logicalHeight = 2048;
   const canvas = document.createElement("canvas");
@@ -473,12 +473,12 @@ export function createSpineCover(book) {
   ctx.fillStyle = book.ink;
   ctx.font = `700 26px ${sans}`;
   ctx.textAlign = "center";
-  ctx.fillText(siteConfig.spineMark, logicalWidth / 2 + 10, logicalHeight - 42);
+  ctx.fillText(window.ShelfConfig.spineMark, logicalWidth / 2 + 10, logicalHeight - 42);
   ctx.restore();
   return canvas;
 }
 
-export function createBackCover(book) {
+function createBackCover(book) {
   const logicalWidth = 1024;
   const logicalHeight = 1536;
   const canvas = document.createElement("canvas");
@@ -512,7 +512,12 @@ export function createBackCover(book) {
   ctx.globalAlpha = 0.78;
   ctx.font = `500 20px ${sans}`;
   ctx.letterSpacing = "3px";
-  ctx.fillText(`${siteConfig.coverImprint} \u00b7 ${siteConfig.coverTagline}`, 110, 1380);
+  ctx.fillText(`${window.ShelfConfig.coverImprint} \u00b7 ${window.ShelfConfig.coverTagline}`, 110, 1380);
   ctx.restore();
   return canvas;
 }
+
+window.ShelfCover.createFrontCover = createFrontCover;
+window.ShelfCover.createTitleDecal = createTitleDecal;
+window.ShelfCover.createSpineCover = createSpineCover;
+window.ShelfCover.createBackCover = createBackCover;

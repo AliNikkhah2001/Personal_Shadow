@@ -1,5 +1,4 @@
-import { catalog } from "./catalog.js";
-import { ShelfEngine } from "./shelf-engine.js";
+// Uses globals: window.ShelfCatalog, window.ShelfEngine
 
 const canvas = document.getElementById("shelf-canvas");
 const app = document.getElementById("app");
@@ -20,10 +19,10 @@ let activeIndex = 0;
 let selectedIndex = null;
 let isFocused = false;
 
-catalog.forEach((_, i) => {
+window.ShelfCatalog.forEach((_, i) => {
   const tick = document.createElement("button");
   tick.type = "button";
-  tick.setAttribute("aria-label", `Browse to ${catalog[i].title}`);
+  tick.setAttribute("aria-label", `Browse to ${window.ShelfCatalog[i].title}`);
   tick.addEventListener("click", () => engine && engine.browseTo(i));
   shelfTicks.appendChild(tick);
 });
@@ -48,7 +47,7 @@ function updateDetails(book, index) {
     </button>
     <div class="book-details__position">
       <span>${String(index + 1).padStart(2, "0")}</span>
-      <span>${String(catalog.length).padStart(2, "0")}</span>
+      <span>${String(window.ShelfCatalog.length).padStart(2, "0")}</span>
     </div>
     <div class="book-details__copy">
       <p class="eyebrow">LIBRARY EDITION</p>
@@ -100,10 +99,10 @@ function setFocused(focused, book, index) {
 async function init() {
   await document.fonts.ready;
 
-  engine = new ShelfEngine(canvas, catalog, {
+  engine = new window.ShelfEngine(canvas, window.ShelfCatalog, {
     onActiveIndex(idx) {
       activeIndex = idx;
-      const book = catalog[idx];
+      const book = window.ShelfCatalog[idx];
       activeTitle.textContent = book.shortTitle;
       activeAuthor.textContent = book.author;
       activeIndexDisplay.textContent = String(idx + 1).padStart(2, "0");
@@ -112,7 +111,7 @@ async function init() {
     onMode(mode, idx) {
       if (mode === "inspect" && idx !== null) {
         selectedIndex = idx;
-        setFocused(true, catalog[idx], idx);
+        setFocused(true, window.ShelfCatalog[idx], idx);
       } else {
         selectedIndex = null;
         setFocused(false, null, null);
@@ -121,7 +120,7 @@ async function init() {
     onStatus(msg) {},
     onReady() {
       loadingScreen.setAttribute("aria-hidden", "true");
-      const firstBook = catalog[0];
+      const firstBook = window.ShelfCatalog[0];
       activeTitle.textContent = firstBook.shortTitle;
       activeAuthor.textContent = firstBook.author;
       activeIndexDisplay.textContent = "01";

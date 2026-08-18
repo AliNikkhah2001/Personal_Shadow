@@ -1,5 +1,7 @@
-export const shelvedYaw = Math.PI / 2;
-export const presentedYaw = 0;
+window.ShelfMotion = {};
+
+window.ShelfMotion.shelvedYaw = Math.PI / 2;
+window.ShelfMotion.presentedYaw = 0;
 
 const shelvedZ = -0.64;
 const presentedZ = 0.4;
@@ -7,7 +9,7 @@ const presentedScale = 1.035;
 const maximumFocusScale = 1.08;
 const collisionMargin = 0.035;
 
-export const browsePhaseDuration = {
+const browsePhaseDuration = {
   "retreat-current": 0.11,
   "turn-current": 0.14,
   "shelve-current": 0.13,
@@ -15,6 +17,13 @@ export const browsePhaseDuration = {
   "turn-next": 0.14,
   "settle-next": 0.11,
 };
+
+window.ShelfMotion.browsePhaseDuration = browsePhaseDuration;
+window.ShelfMotion.shelvedZ = shelvedZ;
+window.ShelfMotion.presentedZ = presentedZ;
+window.ShelfMotion.presentedScale = presentedScale;
+window.ShelfMotion.maximumFocusScale = maximumFocusScale;
+window.ShelfMotion.collisionMargin = collisionMargin;
 
 function clamp01(value) {
   return Math.min(1, Math.max(0, value));
@@ -29,7 +38,7 @@ function lerp(start, end, amount) {
   return start + (end - start) * amount;
 }
 
-export function createMotionLayout(books) {
+function createMotionLayout(books) {
   const maxShelvedHalfDepth = books.reduce(
     (maximum, book) => Math.max(maximum, book.width * 0.5),
     0,
@@ -58,7 +67,7 @@ export function createMotionLayout(books) {
   };
 }
 
-export function shelvedBookPose(layout) {
+function shelvedBookPose(layout) {
   return {
     x: 0,
     z: layout.shelvedZ,
@@ -67,7 +76,7 @@ export function shelvedBookPose(layout) {
   };
 }
 
-export function presentedBookPose(layout) {
+function presentedBookPose(layout) {
   return {
     x: 0,
     z: layout.presentedZ,
@@ -76,7 +85,7 @@ export function presentedBookPose(layout) {
   };
 }
 
-export function browseMotionPose(phase, progress, layout) {
+function browseMotionPose(phase, progress, layout) {
   const t = smooth(progress);
 
   switch (phase) {
@@ -125,7 +134,7 @@ export function browseMotionPose(phase, progress, layout) {
   }
 }
 
-export function focusedBookPose(progress, layout, focusX, focusZ, focusScale) {
+function focusedBookPose(progress, layout, focusX, focusZ, focusScale) {
   const value = clamp01(progress);
   const clearanceProgress = smooth(Math.min(1, value / 0.55));
   const presentationProgress = smooth(
@@ -157,7 +166,7 @@ function axesFor(footprint) {
   };
 }
 
-export function bookFootprintsOverlap(left, right, margin = collisionMargin) {
+function bookFootprintsOverlap(left, right, margin = collisionMargin) {
   const leftAxes = axesFor(left);
   const rightAxes = axesFor(right);
   const axes = [
@@ -189,3 +198,10 @@ export function bookFootprintsOverlap(left, right, margin = collisionMargin) {
     return distance < leftRadius + rightRadius;
   });
 }
+
+window.ShelfMotion.createMotionLayout = createMotionLayout;
+window.ShelfMotion.shelvedBookPose = shelvedBookPose;
+window.ShelfMotion.presentedBookPose = presentedBookPose;
+window.ShelfMotion.browseMotionPose = browseMotionPose;
+window.ShelfMotion.focusedBookPose = focusedBookPose;
+window.ShelfMotion.bookFootprintsOverlap = bookFootprintsOverlap;
