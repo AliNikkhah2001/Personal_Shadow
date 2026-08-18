@@ -41,7 +41,7 @@ function toTexture(
   anisotropy = 8,
 ) {
   const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.encoding = THREE.sRGBEncoding;
   texture.anisotropy = Math.min(
     anisotropy,
     renderer.capabilities.getMaxAnisotropy(),
@@ -152,7 +152,7 @@ class ShelfEngine {
       antialias: true,
       powerPreference: "high-performance",
     });
-    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.outputEncoding = THREE.sRGBEncoding;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.03;
     this.renderer.shadowMap.enabled = true;
@@ -1167,7 +1167,7 @@ class ShelfEngine {
       .loadAsync(ShelfStripe.stripeAssetUrl(key))
       .then((texture) => {
         texture.name = key;
-        texture.colorSpace = color ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+        texture.encoding = color ? THREE.sRGBEncoding : THREE.LinearEncoding;
         texture.anisotropy = Math.min(
           8,
           this.renderer.capabilities.getMaxAnisotropy(),
@@ -1189,7 +1189,7 @@ class ShelfEngine {
       }
 
       texture.name = `customCover:${runtime.data.id}`;
-      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.colorSpace = THREE.sRGBEncoding;
       texture.anisotropy = Math.min(
         8,
         this.renderer.capabilities.getMaxAnisotropy(),
