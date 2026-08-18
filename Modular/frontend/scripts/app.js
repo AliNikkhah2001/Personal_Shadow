@@ -382,6 +382,7 @@
                     case 'quiz': return <QuizEngineView quizzes={quizzes} backend={backend} refreshQuizzes={setQuizzes} flatGoals={flatGoals} courseColors={courseColors} />;
                     case 'flashcards': return <FlashcardsView flashcards={flashcards} backend={backend} refreshCards={setFlashcards} flatGoals={flatGoals} courseColors={courseColors} />;
                     case 'notes': return <NotesView notes={notes} backend={backend} refreshNotes={setNotes} flatGoals={flatGoals} courseColors={courseColors} />;
+                    case 'markdown': return <MarkdownEditorView backend={backend} flatGoals={flatGoals} courseColors={courseColors} />;
                     case 'filesharing': return <FileSharingView backend={backend} flatGoals={flatGoals} settings={settings} />;
                     case 'settings': return <SettingsView settings={settings} setSettings={setSettings} backend={backend} networkFolders={networkFolders} setNetworkFolders={setNetworkFolders} activityLogs={activityLogs} syncLogs={syncLogs} />;
                     default: return <div className="text-white text-center mt-20 font-bold">Module Loading...</div>;
@@ -415,6 +416,7 @@
                                 { id: 'quiz', icon: 'fa-question-circle', label: 'Quiz Engine' },
                                 { id: 'flashcards', icon: 'fa-clone', label: 'Flashcards' },
                                 { id: 'notes', icon: 'fa-edit', label: 'Notes' },
+                                { id: 'markdown', icon: 'fa-file-code', label: 'Markdown' },
                                 { id: 'filesharing', icon: 'fa-share-alt', label: 'File Sharing' },
                             ].map(nav => (
                                 <NavBtn key={nav.id} id={nav.id} icon={nav.icon} label={nav.label} current={currentView} set={setCurrentView} collapsed={isSidebarCollapsed} />

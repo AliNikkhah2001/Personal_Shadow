@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Complete Shelf</title>
+  <link rel="stylesheet" href="shelf-styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&display=swap" rel="stylesheet">
+  <script src="../../shadow_os_cache/js/three.min.js"></script>
+  <script src="../../shadow_os_cache/js/three-orbit-controls.js"></script>
+  <script src="../../shadow_os_cache/js/three-roundedbox.js"></script>
+</head>
+<body>
+  <main class="press-experience" id="app">
+    <canvas id="shelf-canvas" class="shelf-canvas" role="application" tabindex="0"
+      aria-label="Interactive three-dimensional shelf of 19 books. Drag or use the arrow keys to browse. Press Enter to inspect the selected book."></canvas>
+
+    <header class="site-header">
+      <div class="wordmark">
+        <span>THE COMPLETE SHELF</span>
+        <span class="wordmark__divider"></span>
+        <span>AN INTERACTIVE 3D LIBRARY</span>
+      </div>
+      <div class="header-actions">
+        <div class="edition-mark">
+          <span>19 VOLUMES</span>
+          <span>01 CONTINUOUS SHELF</span>
+        </div>
+      </div>
+    </header>
+
+    <section class="browse-caption" id="browse-caption" aria-hidden="false">
+      <p class="eyebrow">
+        <span id="active-index-display">01</span>
+        <span class="eyebrow__line"></span>
+        <span>19</span>
+      </p>
+      <h1 id="active-title"></h1>
+      <p class="browse-caption__author" id="active-author"></p>
+      <button type="button" class="inspect-button" id="inspect-btn" aria-label="Inspect volume">
+        <span>Inspect volume</span>
+        <span aria-hidden="true">\u2197</span>
+      </button>
+    </section>
+
+    <button type="button" class="shelf-arrow shelf-arrow--left" id="browse-prev" aria-label="Previous book">
+      <span class="arrow-icon arrow-icon--left"><span></span></span>
+    </button>
+    <button type="button" class="shelf-arrow shelf-arrow--right" id="browse-next" aria-label="Next book">
+      <span class="arrow-icon arrow-icon--right"><span></span></span>
+    </button>
+
+    <nav class="shelf-index" aria-label="Catalog position">
+      <div class="shelf-index__ticks" id="shelf-ticks"></div>
+      <div class="input-hint" aria-hidden="true">
+        <span>DRAG</span><i></i><span>SCROLL</span><i></i><span>ARROW KEYS</span>
+      </div>
+    </nav>
+
+    <aside class="book-details" id="book-details" aria-hidden="true" aria-label="Book details">
+      <div class="book-details__inner" id="book-details-inner"></div>
+    </aside>
+
+    <div class="loading-screen" id="loading-screen" aria-hidden="false">
+      <div class="loading-screen__mark"><span></span><span></span><span></span></div>
+      <p>Assembling 19 volumes</p>
+    </div>
+  </main>
+
+  <script src="site-config.js"></script>
+  <script src="catalog.js"></script>
+  <script src="book-motion.js"></script>
+  <script src="cover-art.js"></script>
+  <script src="stripe-assets.js"></script>
+  <script src="stripe-foil.js"></script>
+  <script src="shelf-engine.js"></script>
+  <script src="shelf-entry.js"></script>
+</body>
+</html>
