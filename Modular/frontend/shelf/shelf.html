@@ -7,21 +7,8 @@
   <link rel="stylesheet" href="shelf-styles.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&display=swap" rel="stylesheet">
-  <script src="https://unpkg.com/three@0.126.0/build/three.min.js"></script>
-  <script src="https://unpkg.com/three@0.126.0/examples/js/controls/OrbitControls.js"></script>
-  <script src="https://unpkg.com/three@0.126.0/examples/js/geometries/RoundedBoxGeometry.js"></script>
-  <script>
-    // Three.js r126 compatibility shim
-    THREE.sRGBEncoding = THREE.sRGBEncoding || 3001;
-    THREE.LinearEncoding = THREE.LinearEncoding || 3000;
-    // Polyfill renderer.outputEncoding for r126 (added in r139)
-    if (!Object.getOwnPropertyDescriptor(THREE.WebGLRenderer.prototype, 'outputEncoding')) {
-      Object.defineProperty(THREE.WebGLRenderer.prototype, 'outputEncoding', {
-        get: function() { return this.gammaOutput ? THREE.sRGBEncoding : THREE.LinearEncoding; },
-        set: function(val) { this.gammaOutput = val === THREE.sRGBEncoding; this.gammaFactor = 2.2; }
-      });
-    }
-  </script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.150.0/build/three.min.js"></script>
+  <!-- OrbitControls & RoundedBoxGeometry inlined in shelf-engine.js -->
 </head>
 <body>
   <main class="press-experience" id="app">
