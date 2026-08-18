@@ -190,10 +190,7 @@ class MindPalaceWebOS(QMainWindow):
         with open("frontend/index.html", encoding="utf-8") as f:
             html_content = f.read()
 
-        base_dir = os.path.abspath("frontend")
-        base_url = QUrl.fromLocalFile(base_dir + os.sep)
-        shelf_url = QUrl.fromLocalFile(os.path.join(base_dir, "shelf", "shelf.html")).toString()
-        html_content = html_content.replace("__SHELF_URL__", shelf_url)
+        base_url = QUrl.fromLocalFile(os.path.abspath("frontend") + os.sep)
         self.browser.setHtml(html_content, base_url)
         self.setCentralWidget(self.browser)
 
