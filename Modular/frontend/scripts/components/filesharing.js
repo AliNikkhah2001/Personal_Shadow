@@ -64,6 +64,15 @@ var FileSharingView = React.memo(function(props) {
     var _loading = React.useState(false);
     var loading = _loading[0];
     var setLoading = _loading[1];
+    var _treeLoading = React.useState(false);
+    var treeLoading = _treeLoading[0];
+    var setTreeLoading = _treeLoading[1];
+    var _syncProgress = React.useState({status: 'idle', progress: 0, message: ''});
+    var syncProgress = _syncProgress[0];
+    var setSyncProgress = _syncProgress[1];
+    var _isCloning = React.useState(false);
+    var isCloning = _isCloning[0];
+    var setIsCloning = _isCloning[1];
 
     function refreshFolders() {
         backend.request(JSON.stringify({action: 'get_mapped_folders'})).then(function(res) {
@@ -74,11 +83,27 @@ var FileSharingView = React.memo(function(props) {
     }
 
     function refreshFileTree(folderPath) {
+        setTreeLoading(true);
         backend.request(JSON.stringify({action: 'get_merged_folder_hierarchy', path: folderPath})).then(function(res) {
             var data = JSON.parse(res);
             setFolderTree(data.tree || null);
+            setTreeLoading(false);
+        }).catch(function() {
+            setTreeLoading(false);
         });
     }
+
+    function pollSyncProgress() {
+        backend.request(JSON.stringify({action: 'get_sync_progress'})).then(function(res) {
+            var data = JSON.parse(res);
+            setSyncProgress(data);
+        });
+    }
+
+    React.useEffect(function() {
+        var interval = setInterval(pollSyncProgress, 1000);
+        return function() { clearInterval(interval); };
+    }, []);
 
     function refreshChangelog(folderPath) {
         backend.request(JSON.stringify({action: 'get_folder_changelog', path: folderPath, days: retentionDays, max_changes: retentionChanges})).then(function(res) {
@@ -101,10 +126,9 @@ var FileSharingView = React.memo(function(props) {
 
     function handleSelectFolder(path) {
         setSelectedFolder(path);
-        setLoading(true);
+        setTreeLoading(true);
         refreshFileTree(path);
         refreshChangelog(path);
-        setLoading(false);
     }
 
     function handleMapFolder() {
@@ -136,18 +160,45 @@ var FileSharingView = React.memo(function(props) {
         });
     }
 
+    function handleCloneFolder(deviceId) {
+        setIsCloning(true);
+        setSyncProgress({status: 'cloning', progress: 0, message: 'Starting clone from ' + deviceId.substring(0, 8) + '...'});
+        backend.request(JSON.stringify({action: 'hard_clone_remote', target_device: deviceId})).then(function() {
+            setIsCloning(false);
+            setSyncProgress({status: 'idle', progress: 100, message: 'Clone completed'});
+            setTimeout(function() { setSyncProgress({status: 'idle', progress: 0, message: ''}); }, 3000);
+            refreshFolders();
+        }).catch(function() {
+            setIsCloning(false);
+            setSyncProgress({status: 'idle', progress: 0, message: 'Clone failed'});
+        });
+    }
+
     return (
         <div className="flex flex-col h-full fade-in">
-            <div className="flex justify-between items-center mb-6 shrink-0">
-                <h2 className="text-2xl font-serif font-bold text-white tracking-widest uppercase drop-shadow-md">
-                    <i className="fas fa-share-alt mr-3 text-blue-400"></i>File Sharing
-                </h2>
-                <div className="flex gap-3">
-                    <button onClick={handleApplyRetention} className="glass-button px-4 py-2 rounded text-xs font-bold text-yellow-300 uppercase border border-yellow-500/30 hover:bg-yellow-900/30">
-                        <i className="fas fa-broom mr-2"></i>Apply Retention
-                    </button>
+            {syncProgress.status !== 'idle' && (
+                <div className="mb-4 p-3 bg-blue-900/30 border border-blue-500/30 rounded-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                        <i className="fas fa-sync-alt fa-spin text-blue-400"></i>
+                        <span className="text-sm font-bold text-blue-300">{syncProgress.message || 'Syncing...'}</span>
+                    </div>
+                    <div className="w-full bg-gray-800 rounded-full h-2 overflow-hidden">
+                        <div className="bg-blue-500 h-full transition-all duration-300" style={{width: syncProgress.progress + '%'}}></div>
+                    </div>
+                    <div className="text-xs text-blue-300 mt-1 text-right">{syncProgress.progress}%</div>
                 </div>
-            </div>
+            )}
+
+            <div className="flex justify-between items-center mb-6 shrink-0">
+                    <h2 className="text-2xl font-serif font-bold text-white tracking-widest uppercase drop-shadow-md">
+                        <i className="fas fa-share-alt mr-3 text-blue-400"></i>File Sharing
+                    </h2>
+                    <div className="flex gap-3">
+                        <button onClick={handleApplyRetention} className="glass-button px-4 py-2 rounded text-xs font-bold text-yellow-300 uppercase border border-yellow-500/30 hover:bg-yellow-900/30">
+                            <i className="fas fa-broom mr-2"></i>Apply Retention
+                        </button>
+                    </div>
+                </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-grow overflow-hidden">
                 <div className="glass-panel p-4 overflow-y-auto custom-scrollbar">
@@ -190,7 +241,7 @@ var FileSharingView = React.memo(function(props) {
                                         </div>
                                         <div className="text-[10px] text-gray-400">{node.file_count} files - {node.last_update}</div>
                                     </div>
-                                    {!node.is_local && devices.length > 0 && <button onClick={function() { if(confirm('Clone data from ' + devices[0].substring(0,8) + '?')) backend.request(JSON.stringify({action: 'hard_clone_remote', target_device: devices[0]})); }} className="text-yellow-400 hover:text-yellow-300 text-[10px]"><i className="fas fa-download"></i></button>}
+                                    {!node.is_local && devices.length > 0 && <button onClick={function() { if(confirm('Clone data from ' + devices[0].substring(0,8) + '?')) handleCloneFolder(devices[0]); }} className="text-yellow-400 hover:text-yellow-300 text-[10px]" disabled={isCloning}><i className={isCloning ? 'fas fa-spinner fa-spin' : 'fas fa-download'}></i></button>}
                                 </div>
                             );
                         })}
@@ -215,7 +266,10 @@ var FileSharingView = React.memo(function(props) {
                     </div>
                     {selectedFolder ? (
                         <div>
-                            <div className="text-xs text-gray-400 mb-2 font-mono truncate">{selectedFolder}</div>
+                            <div className="flex items-center gap-2 mb-2">
+                                <div className="text-xs text-gray-400 font-mono truncate">{selectedFolder}</div>
+                                {treeLoading && <i className="fas fa-spinner fa-spin text-blue-400 text-xs"></i>}
+                            </div>
                             {folderTree ? (
                                 <div className="space-y-0.5">{FileSharingHelper.renderTreeNode(folderTree, 0, handleSelectFolder)}</div>
                             ) : (

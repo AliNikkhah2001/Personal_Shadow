@@ -19,6 +19,7 @@ class SyncHandler(ActionHandler):
         "sync_now": "sync_now",
         "hard_clone_remote": "hard_clone_remote",
         "force_sync_now": "force_sync_now",
+        "get_sync_progress": "get_sync_progress",
     }
 
     def __init__(self, bridge: Any) -> None:
@@ -36,6 +37,13 @@ class SyncHandler(ActionHandler):
     def force_sync_now(self, req: dict[str, Any]) -> str:
         threading.Thread(target=self._force_sync_thread, daemon=True).start()
         return json.dumps({"status": "started"})
+
+    def get_sync_progress(self, req: dict[str, Any]) -> str:
+        return json.dumps({
+            "status": self.bridge.sync_status if hasattr(self.bridge, 'sync_status') else "idle",
+            "progress": self.bridge.sync_progress_value if hasattr(self.bridge, 'sync_progress_value') else 0,
+            "message": self.bridge.sync_message if hasattr(self.bridge, 'sync_message') else ""
+        })
 
     def _sync_thread(self) -> None:
         try:
