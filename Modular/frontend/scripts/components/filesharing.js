@@ -173,8 +173,9 @@ var FileSharingView = React.memo(function(props) {
 
                     <div className="text-blue-400 font-bold uppercase tracking-widest text-xs border-b border-white/10 pb-2 mb-3">Network Folders</div>
                     <div className="space-y-2">
-                        {networkNodes.map(function(node, i) {
-                            var deviceDots = node.devices.map(function(dev, di) {
+                        {networkNodes && networkNodes.map(function(node, i) {
+                            var devices = node.devices || [];
+                            var deviceDots = devices.map(function(dev, di) {
                                 return <span key={di} className="w-2 h-2 rounded-full" style={{backgroundColor: FileSharingHelper.getDeviceColor(dev)}} title={dev}></span>;
                             });
                             return (
@@ -187,7 +188,7 @@ var FileSharingView = React.memo(function(props) {
                                         </div>
                                         <div className="text-[10px] text-gray-400">{node.file_count} files - {node.last_update}</div>
                                     </div>
-                                    {!node.is_local && <button onClick={function() { if(confirm('Clone data from ' + node.devices[0].substring(0,8) + '?')) backend.request(JSON.stringify({action: 'hard_clone_remote', target_device: node.devices[0]})); }} className="text-yellow-400 hover:text-yellow-300 text-[10px]"><i className="fas fa-download"></i></button>}
+                                    {!node.is_local && devices.length > 0 && <button onClick={function() { if(confirm('Clone data from ' + devices[0].substring(0,8) + '?')) backend.request(JSON.stringify({action: 'hard_clone_remote', target_device: devices[0]})); }} className="text-yellow-400 hover:text-yellow-300 text-[10px]"><i className="fas fa-download"></i></button>}
                                 </div>
                             );
                         })}
