@@ -171,17 +171,23 @@ var FileSharingView = React.memo(function(props) {
                         }) : <div className="text-xs text-gray-500 italic text-center py-4">No folders mapped</div>}
                     </div>
 
-                    <div className="text-blue-400 font-bold uppercase tracking-widest text-xs border-b border-white/10 pb-2 mb-3">Network Nodes</div>
+                    <div className="text-blue-400 font-bold uppercase tracking-widest text-xs border-b border-white/10 pb-2 mb-3">Network Folders</div>
                     <div className="space-y-2">
                         {networkNodes.map(function(node, i) {
+                            var deviceDots = node.devices.map(function(dev, di) {
+                                return <span key={di} className="w-2 h-2 rounded-full" style={{backgroundColor: FileSharingHelper.getDeviceColor(dev)}} title={dev}></span>;
+                            });
                             return (
                                 <div key={i} className="flex items-center gap-3 p-2 bg-white/5 rounded-lg border border-white/5">
-                                    <div className="w-3 h-3 rounded-full" style={{backgroundColor: FileSharingHelper.getDeviceColor(node.device_id)}}></div>
+                                    <div className="flex items-center gap-1">{deviceDots}</div>
                                     <div className="flex-1 min-w-0">
-                                        <div className="text-xs font-bold text-white truncate">{node.device_id.substring(0, 12)} {node.is_local ? '(This PC)' : ''}</div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs font-bold text-white truncate">{node.name}</span>
+                                            {node.is_local && <span className="text-[10px] text-green-400">(This PC)</span>}
+                                        </div>
                                         <div className="text-[10px] text-gray-400">{node.file_count} files - {node.last_update}</div>
                                     </div>
-                                    {!node.is_local && <button onClick={function() { if(confirm('Clone data from ' + node.device_id.substring(0,8) + '?')) backend.request(JSON.stringify({action: 'hard_clone_remote', target_device: node.device_id})); }} className="text-yellow-400 hover:text-yellow-300 text-[10px]"><i className="fas fa-download"></i></button>}
+                                    {!node.is_local && <button onClick={function() { if(confirm('Clone data from ' + node.devices[0].substring(0,8) + '?')) backend.request(JSON.stringify({action: 'hard_clone_remote', target_device: node.devices[0]})); }} className="text-yellow-400 hover:text-yellow-300 text-[10px]"><i className="fas fa-download"></i></button>}
                                 </div>
                             );
                         })}

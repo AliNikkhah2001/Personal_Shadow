@@ -72,15 +72,18 @@ class FileSharingHandler(ActionHandler):
 
         # Merge children recursively
         if "children" in local_tree and local_tree["children"]:
-            merged_children = []
+            # Start with a copy of ALL local children
+            merged_children = [c.copy() for c in local_tree["children"]]
+            # Index merged children by name for quick lookup
+            merged_children_by_name = {c["name"]: c for c in merged_children}
             # Index local children by name
             local_children = {c["name"]: c for c in local_tree["children"]}
 
-            # Add remote children
+            # Merge remote children
             for dev_id, remote_tree in remote_trees.items():
                 if "children" in remote_tree and remote_tree["children"]:
                     for child in remote_tree["children"]:
-                        self._merge_child(merged_children, local_children, child, dev_id)
+                        self._merge_child(merged_children, merged_children_by_name, local_children, child, dev_id)
 
             merged["children"] = merged_children
 
@@ -94,13 +97,12 @@ class FileSharingHandler(ActionHandler):
 
         return merged
 
-    def _merge_child(self, merged_children: list, local_children: dict, remote_child: dict, dev_id: str):
+    def _merge_child(self, merged_children: list, merged_children_by_name: dict, local_children: dict, remote_child: dict, dev_id: str):
         """Merge a single remote child into the merged children list."""
         name = remote_child["name"]
-        if name in local_children:
-            # Merge with existing local child
-            local_child = local_children[name]
-            merged = local_child.copy()
+        if name in merged_children_by_name:
+            # Merge with existing merged child
+            merged = merged_children_by_name[name]
             if "devices" in merged:
                 merged["devices"] = list(set(merged["devices"] + [dev_id]))
             else:
@@ -110,22 +112,27 @@ class FileSharingHandler(ActionHandler):
             if "children" in remote_child and remote_child["children"]:
                 if "children" not in merged:
                     merged["children"] = []
-                merged_children = merged["children"] or []
-                local_grandchildren = {c["name"]: c for c in merged.get("children", [])}
+                merged_grandchildren = merged["children"] or []
+                merged_grandchildren_by_name = {c["name"]: c for c in merged_grandchildren}
+                # We need the local grandchildren for comparison
+                local_grandchildren = {}
+                # Find the corresponding local child
+                for c in local_children.values():
+                    if c["name"] == name and "children" in c:
+                        local_grandchildren = {gc["name"]: gc for gc in c["children"]}
+                        break
                 for grandchild in remote_child["children"]:
-                    self._merge_child(merged_children, local_grandchildren, grandchild, dev_id)
-                merged["children"] = merged_children
+                    self._merge_child(merged_grandchildren, merged_grandchildren_by_name, local_grandchildren, grandchild, dev_id)
+                merged["children"] = merged_grandchildren
 
-            # Replace in merged list
-            for i, c in enumerate(merged_children):
-                if c["name"] == name:
-                    merged_children[i] = merged
-                    break
+            # Update the lookup
+            merged_children_by_name[name] = merged
         else:
             # Add new child from remote
             new_child = remote_child.copy()
             new_child["devices"] = new_child.get("devices", []) + [dev_id]
             merged_children.append(new_child)
+            merged_children_by_name[name] = new_child
 
     def _build_tree(self, root: str, current: str) -> dict:
         name = os.path.basename(current) or current

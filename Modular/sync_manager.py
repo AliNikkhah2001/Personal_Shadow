@@ -678,50 +678,94 @@ class SyncManager(QObject):
         )
 
     def get_network_folders(self):
+        """Get network folders merged by folder name (not device_id).
+        Returns one entry per folder name with combined file counts and device list."""
         network_dir = os.path.join(self.repo_path, self.files_dir)
-        folders = []
-        if os.path.exists(network_dir):
-            for entry in os.listdir(network_dir):
-                entry_path = os.path.join(network_dir, entry)
-                if entry.startswith("_manifest_"):
+        folder_map = {}  # folder_name -> {name, devices: [], file_count, latest_mod, is_local}
+
+        if not os.path.exists(network_dir):
+            return []
+
+        # Scan device folders
+        for entry in os.listdir(network_dir):
+            entry_path = os.path.join(network_dir, entry)
+            if entry.startswith("_manifest_"):
+                continue
+            if not os.path.isdir(entry_path):
+                continue
+
+            is_local = entry == self.device_id
+            # Walk the device's folder structure
+            for root, _, files in os.walk(entry_path):
+                if ".git" in root:
                     continue
-                if os.path.isdir(entry_path):
-                    file_count = 0
-                    latest_mod = 0
-                    for root, _, files in os.walk(entry_path):
-                        for f in files:
-                            if ".git" in root:
-                                continue
-                            file_count += 1
-                            mod_time = os.path.getmtime(os.path.join(root, f))
-                            if mod_time > latest_mod:
-                                latest_mod = mod_time
+                for f in files:
+                    file_path = os.path.join(root, f)
+                    try:
+                        mod_time = os.path.getmtime(file_path)
+                    except OSError:
+                        continue
 
-                    last_update = (
-                        datetime.fromtimestamp(latest_mod).strftime("%Y-%m-%d %H:%M") if latest_mod > 0 else "Never"
-                    )
-                    folders.append(
-                        {
-                            "device_id": entry,
-                            "is_local": entry == self.device_id,
-                            "file_count": file_count,
-                            "last_update": last_update,
-                            "path": entry_path,
+                    # Get relative path from device root
+                    rel_root = os.path.relpath(root, entry_path)
+                    if rel_root == ".":
+                        folder_name = os.path.basename(os.path.normpath(entry_path))
+                    else:
+                        # Get the first folder level under the device root
+                        parts = rel_root.split(os.sep)
+                        folder_name = parts[0] if parts else os.path.basename(os.path.normpath(entry_path))
+
+                    # Update folder map
+                    if folder_name not in folder_map:
+                        folder_map[folder_name] = {
+                            "name": folder_name,
+                            "devices": [],
+                            "file_count": 0,
+                            "latest_mod": 0,
+                            "is_local": False,
                         }
-                    )
 
-            manifest_files = [f for f in os.listdir(network_dir) if f.startswith("_manifest_")]
-            for mf in manifest_files:
-                dev_id = mf.replace("_manifest_", "").replace(".json", "")
-                manifest_path = os.path.join(network_dir, mf)
-                try:
-                    with open(manifest_path) as f:
-                        manifest = json.load(f)
-                    existing = next((x for x in folders if x["device_id"] == dev_id), None)
-                    if existing:
-                        existing["file_count"] = len(manifest)
-                except Exception:
-                    pass
+                    folder_map[folder_name]["devices"].append(entry)
+                    folder_map[folder_name]["file_count"] += 1
+                    if mod_time > folder_map[folder_name]["latest_mod"]:
+                        folder_map[folder_name]["latest_mod"] = mod_time
+                    if is_local:
+                        folder_map[folder_name]["is_local"] = True
+
+        # Also check manifest files for device file counts
+        manifest_files = [f for f in os.listdir(network_dir) if f.startswith("_manifest_")]
+        for mf in os.listdir(network_dir):
+            if not mf.startswith("_manifest_") or not mf.endswith(".json"):
+                continue
+            dev_id = mf.replace("_manifest_", "").replace(".json", "")
+            manifest_path = os.path.join(network_dir, mf)
+            try:
+                with open(manifest_path) as f:
+                    manifest = json.load(f)
+                # Update file count for root folder if it exists
+                base_folder = os.path.basename(os.path.normpath(os.path.join(network_dir, dev_id)))
+                if base_folder in folder_map:
+                    folder_map[base_folder]["file_count"] = len(manifest)
+            except Exception:
+                pass
+
+        # Convert to list
+        folders = []
+        for name, info in folder_map.items():
+            devices = list(set(info["devices"]))  # Deduplicate
+            last_update = (
+                datetime.fromtimestamp(info["latest_mod"]).strftime("%Y-%m-%d %H:%M") if info["latest_mod"] > 0 else "Never"
+            )
+            folders.append(
+                {
+                    "name": name,
+                    "devices": devices,
+                    "is_local": info["is_local"],
+                    "file_count": info["file_count"],
+                    "last_update": last_update,
+                    "device_id": devices[0] if devices else "",
+                }
+            )
 
         return folders
 
