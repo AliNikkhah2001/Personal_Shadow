@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import shutil
+import sqlite3
 import uuid
 from datetime import datetime
 
@@ -245,6 +246,105 @@ class SyncManager(QObject):
         self.sync_completed.emit(True, "Master Overwrite completed successfully")
         return True, "Master Overwrite completed successfully"
 
+    def _is_database_empty(self) -> bool:
+        """Check if database is empty (no tables or all tables empty)."""
+        try:
+            tables = self._get_all_tables()
+            if not tables:
+                return True
+            for table in tables:
+                db.c.execute(f"SELECT COUNT(*) FROM {table}")
+                count = db.c.fetchone()[0]
+                if count > 0:
+                    return False
+            return True
+        except Exception:
+            return True
+
+    def _auto_clone_from_master(self) -> tuple[bool, str]:
+        """Auto-clone from master if database is empty and master exists."""
+        self.sync_progress.emit("Checking for cluster master...")
+        master_id = self._get_master_id()
+        if not master_id:
+            return False, "No master found in cluster"
+
+        self.sync_progress.emit(f"Auto-cloning from master {master_id[:8]}...")
+        sync_dir = os.path.join(self.repo_path, self.db_sync_dir)
+        target_file = os.path.join(sync_dir, f"{master_id}.json")
+        
+        if not os.path.exists(target_file):
+            return False, f"Master data file not found: {target_file}"
+
+        # Wipe local database
+        tables_to_clear = self._get_all_tables()
+        for table in tables_to_clear:
+            with contextlib.suppress(Exception):
+                db.c.execute(f"DELETE FROM {table}")
+        db.c.execute("DELETE FROM deleted_uuids")
+        db.safe_commit()
+
+        # Inject master data
+        self.sync_progress.emit("Injecting master data...")
+        try:
+            with open(target_file, encoding="utf-8") as f:
+                remote_data = json.load(f)
+        except Exception as e:
+            return False, f"Failed to read master data: {e}"
+
+        for k, v in remote_data.get("settings", {}).items():
+            if k not in ["device_id", "has_token", "git_status"]:
+                self.bridge.config.set(k, v)
+
+        tables_to_clear = self._get_all_tables()
+        for table, rows in remote_data.get("tables", {}).items():
+            if table not in tables_to_clear:
+                continue
+            for row in rows:
+                cols = ", ".join(row.keys())
+                placeholders = ", ".join(["?"] * len(row))
+                with contextlib.suppress(sqlite3.IntegrityError):
+                    db.c.execute(f"INSERT INTO {table} ({cols}) VALUES ({placeholders})", list(row.values()))
+        db.safe_commit()
+
+        self.sync_progress.emit("Auto-clone from master completed")
+        return True, f"Auto-cloned from master {master_id[:8]}"
+
+    def _ensure_cluster_master(self):
+        """Ensure cluster_state.json exists with a valid master_id.
+        If no master exists and we have data, promote this device to master."""
+        cluster_file = os.path.join(self.repo_path, "cluster_state.json")
+        if os.path.exists(cluster_file):
+            try:
+                with open(cluster_file) as f:
+                    data = json.load(f)
+                    if data.get("master_id"):
+                        return  # Master already exists
+            except Exception:
+                pass
+
+        # No master exists, check if we have data to become master
+        tables = self._get_all_tables()
+        has_data = False
+        for table in tables:
+            db.c.execute(f"SELECT COUNT(*) FROM {table}")
+            if db.c.fetchone()[0] > 0:
+                has_data = True
+                break
+
+        if has_data:
+            self.sync_progress.emit("No cluster master found, promoting this device to master...")
+            cluster_data = {
+                "master_id": self.device_id,
+                "timestamp": datetime.now().isoformat(),
+            }
+            with open(os.path.join(self.repo_path, "cluster_state.json"), "w") as f:
+                json.dump(cluster_data, f)
+            # Add to git
+            try:
+                self.repo.git.add(os.path.join(self.repo_path, "cluster_state.json"))
+            except Exception:
+                pass
+
     def sync(self):
         if not config.get("sync_enabled", False):
             return False, "Sync is disabled in settings"
@@ -253,6 +353,15 @@ class SyncManager(QObject):
         if not success:
             self.sync_completed.emit(False, msg)
             return False, msg
+
+        # Check if database is empty and auto-clone from master if needed
+        if self._is_database_empty():
+            self.sync_progress.emit("Database empty, checking for cluster master...")
+            cloned, msg = self._auto_clone_from_master()
+            if cloned:
+                self.sync_progress.emit(msg)
+            else:
+                self.sync_progress.emit("No master found, starting fresh")
 
         self.sync_progress.emit("Pulling latest data from GitHub...")
         try:
@@ -263,6 +372,9 @@ class SyncManager(QObject):
             logging.error(f"Pull exception: {e}")
             self.sync_completed.emit(False, f"Pull exception: {e!s}")
             return False, f"Pull exception: {e!s}"
+
+        # Ensure cluster_state.json exists and we have a master
+        self._ensure_cluster_master()
 
         self.sync_progress.emit("Merging remote data...")
         self.ensure_uuids_and_timestamps()
