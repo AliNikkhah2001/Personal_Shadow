@@ -339,7 +339,7 @@ def _force_sync_thread(self) -> None:
         except Exception as e:
             self.bridge.handle_sync_completed(False, str(e))
 
-    def _resolve_clone_target(self, sync_dir: str, target_device: str | None) -> str | None:
+def _resolve_clone_target(self, sync_dir: str, target_device: str | None) -> str | None:
         master_id = None
         if hasattr(self.bridge.sync_manager, "_get_master_id"):
             master_id = self.bridge.sync_manager._get_master_id()
