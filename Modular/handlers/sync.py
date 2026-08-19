@@ -246,10 +246,6 @@ class SyncHandler(ActionHandler):
             )
         except Exception as e:
             self.bridge.handle_sync_completed(False, str(e))
-                True, f"Successfully cloned from {os.path.basename(target_file)}. Restart App."
-            )
-        except Exception as e:
-            self.bridge.handle_sync_completed(False, str(e))
 
 def _force_sync_thread(self) -> None:
         try:
