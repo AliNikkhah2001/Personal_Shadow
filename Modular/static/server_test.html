@@ -1,0 +1,178 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Food Vision System - Server Test</title>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; }
+        .status { padding: 10px; border-radius: 5px; margin: 20px 0; }
+        .ready { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .info { background: #d6d8dd; color: #383d41; border: 1px solid #adb5bd; }
+        img { max-width: 100%; height: auto; }
+        .controls { margin: 20px 0; }
+        button { padding: 8px 16px; margin: 5px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>Food Vision System API Test</h1>
+
+    <div class="status" id="status">Status: Initializing...</div>
+
+    <div class="info">
+        <h3>Endpoints</h3>
+        <ul>
+            <li><code>GET /</code> - This page</li>
+            <li><code>GET /test</code> - Health check</li>
+            <li><code>POST /detect</code> - Run detection on image</li>
+            <li><code>POST /calibrate</code> - Calibrate reference object</li>
+        </ul>
+    </div>
+
+    <div class="controls">
+        <h3>Test Detection</h3>
+        <input type="file" id="imageInput" accept="image/*">
+        <button onclick="runDetection()">Run Detection</button>
+        <button onclick="checkHealth()">Health Check</button>
+        <br><br>
+        <span>Calibrate reference:</span>
+        <input type="checkbox" id="calibrateCheck"> Calibrate reference object
+        <button onclick="runCalibration()">Calibrate</button>
+    </div>
+
+    <h3>Results</h3>
+    <div id="results" style="display:none; margin-top:20px;">
+        <h4>Detected Food Items</h4>
+        <ul id="detectionList"></ul>
+        <p>Pixels per cm: <span id="ppm">--</span></p>
+        <p>Reference calibrated: <span id="refStatus">--</span></p>
+    </div>
+
+    <h3>Annotated Image</h3>
+    <img id="resultImage" alt="Annotated result" style="margin-top:10px; display:none;">
+    <p><a id="downloadLink" download="food_results.jpg" style="display:none;">Download Results</a></p>
+
+    <script>
+        function show(element) {
+            element.style.display = 'block';
+        }
+        function hide(element) {
+            element.style.display = 'none';
+        }
+
+        function updateStatus(text, className) {
+            const status = document.getElementById('status');
+            status.innerText = 'Status: ' + text;
+            status.className = 'status ' + className;
+        }
+
+        function runDetection() {
+            const file = document.getElementById('imageInput').files[0];
+            const calibrate = document.getElementById('calibrateCheck').checked;
+            const formData = new FormData();
+            formData.append('image', file);
+            if (calibrate) formData.append('calibrate', 'true');
+
+            fetch('/detect', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    updateStatus(data.error, 'error');
+                    alert('Error: ' + data.error);
+                    return;
+                }
+
+                updateStatus('Detection complete', 'ready');
+
+                const list = document.getElementById('detectionList');
+                list.innerHTML = '';
+
+                if (data.results && data.results.length > 0) {
+                    data.results.forEach((r, i) => {
+                        const li = document.createElement('li');
+                        li.innerHTML = `
+                            <strong>${r.class_name}</strong> (${r.confidence.toFixed(2)} conf)<br>
+                            Calories: ${r.calorie_info ? r.calorie_info.calories + ' kcal' : 'N/A'}<br>
+                            Weight: ${r.calorie_info ? r.calorie_info.weight_g + ' g' : 'N/A'}<br>
+                            Volume: ${r.size_info ? r.size_info.volume_cm3 + ' cm³' : 'N/A'}<br>
+                            Size: ${r.size_info ? r.size_info.width_cm + '×' + r.size_info.height_cm + ' cm²' : 'N/A'}
+                        `;
+                        list.appendChild(li);
+                    });
+                } else {
+                    list.innerHTML = '<li>No food items detected</li>';
+                }
+
+                const img = document.getElementById('resultImage');
+                img.src = 'data:image/jpg;base64,' + data.annotated_image;
+                show(img);
+                show(document.getElementById('results'));
+
+                document.getElementById('ppm').innerText = data.pixels_per_cm.toFixed(2);
+
+                const refStatus = document.getElementById('refStatus');
+                refStatus.innerText = data.reference_calibrated ? 'Yes' : 'No';
+                if (data.reference_calibrated) {
+                    refStatus.innerText += ` (${data.pixels_per_cm.toFixed(2)} px/cm)`;
+                }
+
+                show(document.getElementById('results'));
+                show(document.getElementById('downloadLink'));
+            })
+            .catch(error => {
+                updateStatus('Error: ' + error.message, 'error');
+                console.error('Error:', error);
+            });
+        }
+
+        function checkHealth() {
+            fetch('/test')
+            .then(response => response.json())
+            .then(data => {
+                updateStatus(data.status || 'unknown', data.ready ? 'ready' : 'initializing');
+                console.log('Health check:', data);
+            })
+            .catch(error => {
+                updateStatus('Cannot connect', 'error');
+                console.error('Error:', error);
+            });
+        }
+
+        function runCalibration() {
+            const file = document.getElementById('imageInput').files[0];
+            if (!file) {
+                alert('Please select an image first');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('image', file);
+
+            fetch('/calibrate', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                    return;
+                }
+
+                updateStatus('Calibration ' + data.ref_status, 'ready');
+
+                const img = document.getElementById('resultImage');
+                img.src = 'data:image/jpg;base64,' + data.annotated_image;
+                show(img);
+            })
+            .catch(error => {
+                alert('Error: ' + error.message);
+                console.error('Error:', error);
+            });
+        }
+    </script>
+</body>
+</html>
