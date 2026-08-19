@@ -41,7 +41,7 @@ function toTexture(
   anisotropy = 8,
 ) {
   const texture = new THREE.CanvasTexture(canvas);
-  texture.encoding = THREE.sRGBEncoding;
+  texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = Math.min(
     anisotropy,
     renderer.capabilities.getMaxAnisotropy(),
@@ -152,7 +152,7 @@ class ShelfEngine {
       antialias: true,
       powerPreference: "high-performance",
     });
-    this.renderer.outputEncoding = THREE.sRGBEncoding;
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.03;
     this.renderer.shadowMap.enabled = true;
@@ -162,7 +162,7 @@ class ShelfEngine {
     this.camera.position.copy(browseCamera);
     this.camera.lookAt(browseTarget);
 
-    this.controls = new THREE.OrbitControls(this.camera, this.canvas);
+    this.controls = new OrbitControls(this.camera, this.canvas);
     this.controls.enabled = false;
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.075;
@@ -1167,7 +1167,7 @@ class ShelfEngine {
       .loadAsync(ShelfStripe.stripeAssetUrl(key))
       .then((texture) => {
         texture.name = key;
-        texture.encoding = color ? THREE.sRGBEncoding : THREE.LinearEncoding;
+        texture.colorSpace = color ? THREE.SRGBColorSpace : THREE.LinearSRGBColorSpace;
         texture.anisotropy = Math.min(
           8,
           this.renderer.capabilities.getMaxAnisotropy(),
@@ -1189,7 +1189,7 @@ class ShelfEngine {
       }
 
       texture.name = `customCover:${runtime.data.id}`;
-      texture.colorSpace = THREE.sRGBEncoding;
+      texture.colorSpace = THREE.SRGBColorSpace;
       texture.anisotropy = Math.min(
         8,
         this.renderer.capabilities.getMaxAnisotropy(),
