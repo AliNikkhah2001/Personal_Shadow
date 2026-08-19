@@ -32,7 +32,7 @@ class FileSharingHandler(ActionHandler):
         if not path or not os.path.exists(path):
             return json.dumps({"error": "Folder not found", "tree": None})
 
-        tree = self._build_tree(path, path)
+        tree = self._build_tree(path, path, max_depth=5)
         return json.dumps({"tree": tree})
 
     def get_merged_folder_hierarchy(self, req: dict[str, Any]) -> str:
@@ -42,24 +42,36 @@ class FileSharingHandler(ActionHandler):
             return json.dumps({"error": "Folder not found", "tree": None})
 
         # Build local tree
-        local_tree = self._build_tree(path, path)
+        local_tree = self._build_tree(path, path, max_depth=5)
+
+        # Find which mapped folder this path belongs to, to compute correct relative path
+        mapped_paths = config.get("sync_local_paths", [])
+        mapped_root = None
+        for mp in mapped_paths:
+            if path == mp or path.startswith(mp + os.sep):
+                mapped_root = mp
+                break
 
         # Get remote trees from all other devices
         repo_path = self.bridge.sync_manager.repo_path
         files_dir = os.path.join(repo_path, "files")
         remote_trees = {}
 
-        if os.path.exists(files_dir):
+        if os.path.exists(files_dir) and mapped_root:
+            # Compute relative path from mapped root
+            rel_path = os.path.relpath(path, mapped_root)
+            # The base folder name used in sync (basename of mapped root)
+            base_folder = os.path.basename(os.path.normpath(mapped_root))
+
             for entry in os.listdir(files_dir):
                 entry_path = os.path.join(files_dir, entry)
                 if entry.startswith("_manifest_") or entry == self.bridge.sync_manager.device_id:
                     continue
                 if os.path.isdir(entry_path):
-                    # Build tree for this remote device
-                    rel_path = os.path.relpath(path, os.path.dirname(path))
-                    remote_base = os.path.join(entry_path, rel_path)
+                    # Remote path is: files/{device_id}/{base_folder}/{rel_path}
+                    remote_base = os.path.join(entry_path, base_folder, rel_path)
                     if os.path.exists(remote_base):
-                        remote_trees[entry] = self._build_tree(remote_base, remote_base)
+                        remote_trees[entry] = self._build_tree(remote_base, remote_base, max_depth=3)
 
         # Merge local and remote trees
         merged_tree = self._merge_trees(local_tree, remote_trees)
@@ -134,7 +146,7 @@ class FileSharingHandler(ActionHandler):
             merged_children.append(new_child)
             merged_children_by_name[name] = new_child
 
-    def _build_tree(self, root: str, current: str) -> dict:
+    def _build_tree(self, root: str, current: str, depth: int = 0, max_depth: int = 3) -> dict:
         name = os.path.basename(current) or current
         is_dir = os.path.isdir(current)
 
@@ -145,14 +157,21 @@ class FileSharingHandler(ActionHandler):
             "devices": self._get_file_devices(current),
         }
 
-        if is_dir:
+        if is_dir and depth < max_depth:
             children = []
             try:
                 for entry in sorted(os.listdir(current)):
                     if entry.startswith(".") or entry == "__pycache__":
                         continue
                     child_path = os.path.join(current, entry)
-                    children.append(self._build_tree(root, child_path))
+                    children.append(self._build_tree(root, child_path, depth + 1, max_depth))
+                node["children"] = children
+                if depth == max_depth - 1:
+                    node["has_more"] = True
+            except PermissionError:
+                pass
+            except Exception:
+                pass
             except PermissionError:
                 pass
             node["children"] = children

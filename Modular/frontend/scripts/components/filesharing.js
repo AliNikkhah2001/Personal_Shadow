@@ -160,10 +160,12 @@ var FileSharingView = React.memo(function(props) {
                     </div>
                     <div className="space-y-2 mb-4">
                         {folders.length > 0 ? folders.map(function(path, i) {
+                            var displayName = path.split(/[\\/]/).pop() || path;
                             return (
                                 <div key={i} className={'flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all ' + (selectedFolder === path ? 'bg-blue-900/30 border border-blue-500/50' : 'bg-white/5 border border-white/5 hover:bg-white/10')} onClick={function() { handleSelectFolder(path); }}>
                                     <i className="fas fa-folder text-yellow-400"></i>
-                                    <span className="text-xs text-gray-300 truncate flex-1 font-mono">{path}</span>
+                                    <span className="text-xs text-gray-300 truncate flex-1 font-medium" title={path}>{displayName}</span>
+                                    <span className="text-[10px] text-gray-500 font-mono truncate max-w-[150px]" title={path}>{path}</span>
                                     <button onClick={function(e) { e.stopPropagation(); handleOpenFolder(path); }} className="text-blue-400 hover:text-blue-300"><i className="fas fa-external-link-alt text-[10px]"></i></button>
                                     <button onClick={function(e) { e.stopPropagation(); handleUnmapFolder(path); }} className="text-red-400 hover:text-red-300"><i className="fas fa-times text-[10px]"></i></button>
                                 </div>
