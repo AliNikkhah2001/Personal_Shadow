@@ -328,6 +328,7 @@ class TestHandlerDispatch(unittest.TestCase):
     def test_known_actions_registered(self):
         expected = {
             "get_folder_hierarchy",
+            "get_merged_folder_hierarchy",
             "get_folder_changelog",
             "bind_folder_goal",
             "get_goal_folder_bindings",

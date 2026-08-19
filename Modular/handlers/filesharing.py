@@ -17,6 +17,7 @@ class FileSharingHandler(ActionHandler):
 
     actions: dict[str, str] = {
         "get_folder_hierarchy": "get_folder_hierarchy",
+        "get_merged_folder_hierarchy": "get_merged_folder_hierarchy",
         "get_folder_changelog": "get_folder_changelog",
         "bind_folder_goal": "bind_folder_goal",
         "get_goal_folder_bindings": "get_goal_folder_bindings",
@@ -33,6 +34,98 @@ class FileSharingHandler(ActionHandler):
 
         tree = self._build_tree(path, path)
         return json.dumps({"tree": tree})
+
+    def get_merged_folder_hierarchy(self, req: dict[str, Any]) -> str:
+        """Build a merged folder hierarchy from local + all remote devices."""
+        path = req.get("path", "")
+        if not path or not os.path.exists(path):
+            return json.dumps({"error": "Folder not found", "tree": None})
+
+        # Build local tree
+        local_tree = self._build_tree(path, path)
+
+        # Get remote trees from all other devices
+        repo_path = self.bridge.sync_manager.repo_path
+        files_dir = os.path.join(repo_path, "files")
+        remote_trees = {}
+
+        if os.path.exists(files_dir):
+            for entry in os.listdir(files_dir):
+                entry_path = os.path.join(files_dir, entry)
+                if entry.startswith("_manifest_") or entry == self.bridge.sync_manager.device_id:
+                    continue
+                if os.path.isdir(entry_path):
+                    # Build tree for this remote device
+                    rel_path = os.path.relpath(path, os.path.dirname(path))
+                    remote_base = os.path.join(entry_path, rel_path)
+                    if os.path.exists(remote_base):
+                        remote_trees[entry] = self._build_tree(remote_base, remote_base)
+
+        # Merge local and remote trees
+        merged_tree = self._merge_trees(local_tree, remote_trees)
+        return json.dumps({"tree": merged_tree})
+
+    def _merge_trees(self, local_tree: dict, remote_trees: dict) -> dict:
+        """Merge local tree with remote trees, combining devices list."""
+        # Start with a copy of local tree
+        merged = local_tree.copy()
+
+        # Merge children recursively
+        if "children" in local_tree and local_tree["children"]:
+            merged_children = []
+            # Index local children by name
+            local_children = {c["name"]: c for c in local_tree["children"]}
+
+            # Add remote children
+            for dev_id, remote_tree in remote_trees.items():
+                if "children" in remote_tree and remote_tree["children"]:
+                    for child in remote_tree["children"]:
+                        self._merge_child(merged_children, local_children, child, dev_id)
+
+            merged["children"] = merged_children
+
+        # Merge devices list
+        if "devices" in merged:
+            all_devices = set(merged["devices"])
+            for dev_id, remote_tree in remote_trees.items():
+                if "devices" in remote_tree:
+                    all_devices.update(remote_tree["devices"])
+            merged["devices"] = list(all_devices)
+
+        return merged
+
+    def _merge_child(self, merged_children: list, local_children: dict, remote_child: dict, dev_id: str):
+        """Merge a single remote child into the merged children list."""
+        name = remote_child["name"]
+        if name in local_children:
+            # Merge with existing local child
+            local_child = local_children[name]
+            merged = local_child.copy()
+            if "devices" in merged:
+                merged["devices"] = list(set(merged["devices"] + [dev_id]))
+            else:
+                merged["devices"] = [dev_id]
+
+            # Recursively merge children
+            if "children" in remote_child and remote_child["children"]:
+                if "children" not in merged:
+                    merged["children"] = []
+                merged_children = merged["children"] or []
+                local_grandchildren = {c["name"]: c for c in merged.get("children", [])}
+                for grandchild in remote_child["children"]:
+                    self._merge_child(merged_children, local_grandchildren, grandchild, dev_id)
+                merged["children"] = merged_children
+
+            # Replace in merged list
+            for i, c in enumerate(merged_children):
+                if c["name"] == name:
+                    merged_children[i] = merged
+                    break
+        else:
+            # Add new child from remote
+            new_child = remote_child.copy()
+            new_child["devices"] = new_child.get("devices", []) + [dev_id]
+            merged_children.append(new_child)
 
     def _build_tree(self, root: str, current: str) -> dict:
         name = os.path.basename(current) or current

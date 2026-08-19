@@ -78,7 +78,7 @@ class TestJSXCompilation(unittest.TestCase):
             "get_mapped_folders",
             "map_folder",
             "unmap_folder",
-            "get_folder_hierarchy",
+            "get_merged_folder_hierarchy",
             "get_folder_changelog",
             "bind_folder_goal",
             "get_goal_folder_bindings",

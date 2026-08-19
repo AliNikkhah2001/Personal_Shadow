@@ -11,15 +11,17 @@ var FileSharingHelper = {
         var isDir = node.type === 'directory';
         var padStyle = {paddingLeft: (depth * 16) + 'px'};
         var self = this;
+        var devices = node.devices || [];
+        var deviceDots = devices.map(function(dev, i) {
+            return <span key={i} className="w-2 h-2 rounded-full" style={{backgroundColor: self.getDeviceColor(dev)}} title={dev}></span>;
+        });
         return (
             <div key={node.path} style={padStyle}>
                 <div className="flex items-center gap-2 py-1 px-2 rounded hover:bg-white/5 cursor-pointer text-xs group" onClick={function() { if (isDir) onFolderSelect(node.path); }}>
                     <i className={'fas ' + (isDir ? 'fa-folder text-yellow-400' : 'fa-file text-gray-400')}></i>
                     <span className="text-gray-300 truncate flex-1">{node.name}</span>
                     {node.size !== undefined && <span className="text-gray-500 text-[10px]">{(node.size / 1024).toFixed(1)}KB</span>}
-                    {node.devices && node.devices.map(function(dev, i) {
-                        return <span key={i} className="w-2 h-2 rounded-full" style={{backgroundColor: self.getDeviceColor(dev)}} title={dev}></span>;
-                    })}
+                    <span className="flex items-center gap-1">{deviceDots}</span>
                 </div>
                 {isDir && node.children && node.children.map(function(child) { return self.renderTreeNode(child, depth + 1, onFolderSelect); })}
             </div>
@@ -72,7 +74,7 @@ var FileSharingView = React.memo(function(props) {
     }
 
     function refreshFileTree(folderPath) {
-        backend.request(JSON.stringify({action: 'get_folder_hierarchy', path: folderPath})).then(function(res) {
+        backend.request(JSON.stringify({action: 'get_merged_folder_hierarchy', path: folderPath})).then(function(res) {
             var data = JSON.parse(res);
             setFolderTree(data.tree || null);
         });
