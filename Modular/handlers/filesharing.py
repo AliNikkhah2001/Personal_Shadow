@@ -147,7 +147,7 @@ class FileSharingHandler(ActionHandler):
             merged_children.append(new_child)
             merged_children_by_name[name] = new_child
 
-    def _build_tree(self, root: str, current: str, depth: int = 0, max_depth: int = 3) -> dict:
+    def _build_tree(self, root: str, current: str, depth: int = 0, max_depth: int = 2) -> dict:
         name = os.path.basename(current) or current
         is_dir = os.path.isdir(current)
 
@@ -161,21 +161,21 @@ class FileSharingHandler(ActionHandler):
         if is_dir and depth < max_depth:
             children = []
             try:
-                for entry in sorted(os.listdir(current)):
-                    if entry.startswith(".") or entry == "__pycache__":
-                        continue
-                    child_path = os.path.join(current, entry)
+                entries = sorted(os.listdir(current))
+            except (PermissionError, OSError):
+                return node
+
+            for entry in entries:
+                if entry.startswith(".") or entry == "__pycache__":
+                    continue
+                child_path = os.path.join(current, entry)
+                try:
                     children.append(self._build_tree(root, child_path, depth + 1, max_depth))
-                node["children"] = children
-                if depth == max_depth - 1:
-                    node["has_more"] = True
-            except PermissionError:
-                pass
-            except Exception:
-                pass
-            except PermissionError:
-                pass
+                except (PermissionError, OSError, RecursionError):
+                    continue
             node["children"] = children
+            if depth == max_depth - 1:
+                node["has_more"] = True
         else:
             try:
                 stat = os.stat(current)
